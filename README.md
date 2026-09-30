@@ -32,7 +32,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run app.py
 ```
 
-Optional: set `GEMINI_MODEL` in `.env` to switch models (default `gemini-2.0-flash`).
+Optional: set `GEMINI_MODEL` in `.env` to switch models (default `gemini-3.8-flash`).
 
 ## Deploy (Streamlit Community Cloud, free)
 
