@@ -95,7 +95,7 @@ You never make decisions for people: task assignment and schedule changes are
 suggestions only — tell the user to confirm with an exec or the team lead.
 """
 
-def chat_once(client, history: list, user_msg: str) -> str:
+def chat_once(client, history: list, user_msg: str, identity_note: str = "") -> str:
     model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     contents = []
     for h in history:
@@ -104,9 +104,37 @@ def chat_once(client, history: list, user_msg: str) -> str:
     resp = client.models.generate_content(
         model=model,
         contents=contents,
-        config={"system_instruction": SYSTEM_PROMPT + "\n\n" + brain_context()},
+        config={"system_instruction": SYSTEM_PROMPT + "\n\n" + identity_note + "\n\n" + brain_context()},
     )
     return resp.text
+
+# ---------- Member identity ----------
+def get_member_names() -> list:
+    p = BRAIN_DIR / "04_members.md"
+    if not p.exists():
+        return []
+    return re.findall(r"^### (.+)$", p.read_text(encoding="utf-8"), re.M)
+
+def get_member_block(name: str) -> str:
+    p = BRAIN_DIR / "04_members.md"
+    if not p.exists():
+        return ""
+    text = p.read_text(encoding="utf-8")
+    m = re.search(rf"^### {re.escape(name)}\s*\n(.*?)(?=^### |\Z)",
+                  text, re.M | re.S)
+    return m.group(1).strip() if m else ""
+
+def identity_note() -> str:
+    ident = st.session_state.get("identity", "Not identified")
+    if ident in ("Not identified", "I'm new here"):
+        return ("The person chatting has not identified themselves yet. "
+                "If they ask 'who am I', invite them to pick their name in "
+                "the sidebar or do the onboarding.")
+    block = get_member_block(ident)
+    return (f"The person you are talking to has identified as: {ident}.\n"
+            f"Their saved profile from the member list:\n{block}\n"
+            "Use this to personalize answers (identity questions, task "
+            "matching, deadlines, progress).")
 
 # ---------- Page ----------
 st.set_page_config(page_title="LU Brain", page_icon=None, layout="wide")
@@ -117,7 +145,9 @@ html, body, [class*="css"] {{
     font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
     background: #ffffff; color: #000000;
 }}
-h1, h2, h3 {{ font-family: Georgia, serif !important; letter-spacing: 0.01em; color: #000; }}
+h1, h2 {{ font-family: -apple-system, "Helvetica Neue", Arial, sans-serif !important;
+          color: {GREEN}; letter-spacing: 0.01em; }}
+h3 {{ font-family: -apple-system, "Helvetica Neue", Arial, sans-serif !important; color: #000; }}
 .block-container {{ max-width: 820px; padding-top: 2rem; }}
 a {{ color: {PINK} !important; }}
 hr {{ border: none; border-top: 1px solid #000; opacity: 0.15; }}
@@ -147,13 +177,24 @@ with st.sidebar:
     st.caption("Lady Up team ops assistant")
     nav = st.radio("Navigate", ["Chat", "Brain", "Chase List"], label_visibility="collapsed")
     st.divider()
+    names = get_member_names()
+    st.selectbox(
+        "Chatting as",
+        ["Not identified"] + names + ["I'm new here"],
+        key="identity",
+        help="Pick your name so the agent knows who you are.",
+    )
+    if st.session_state.get("identity") not in (None, "Not identified", "I'm new here"):
+        st.caption(f"Chatting as {st.session_state.identity}")
+    st.divider()
     ok = (BRAIN_DIR / "00_overview.md").exists()
     st.caption("Brain loaded" if ok else "Brain files missing")
 
 # ---------- Chat ----------
 if nav == "Chat":
     st.markdown("## Chat")
-    st.caption("Talk to LU Brain: onboarding, tasks, deadlines, progress updates.")
+    st.caption("Talk to LU Brain: onboarding, tasks, deadlines, progress updates. "
+               "English or 中文都可以。")
 
     client = get_client()
     if client is None:
@@ -162,6 +203,21 @@ if nav == "Chat":
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
+
+    # Auto-start onboarding if the visitor picked "I'm new here"
+    if (not st.session_state.messages
+            and st.session_state.get("identity") == "I'm new here"
+            and not st.session_state.get("onboard_auto_started")):
+        st.session_state.onboard_auto_started = True
+        st.session_state.messages.append(
+            {"role": "user", "text": "Hi, I just joined the team. Please onboard me."})
+        with st.spinner("Thinking..."):
+            try:
+                reply = chat_once(client, [], st.session_state.messages[-1]["text"],
+                                  identity_note())
+            except Exception as e:
+                reply = f"Something went wrong: {e}"
+        st.session_state.messages.append({"role": "assistant", "text": reply})
 
     def extract_profile(text: str):
         m = re.search(r"```profile\s*(\{.*?\})\s*```", text, re.S)
@@ -180,7 +236,8 @@ if nav == "Chat":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    reply = chat_once(client, st.session_state.messages[:-1], user_text)
+                    reply = chat_once(client, st.session_state.messages[:-1], user_text,
+                                      identity_note())
                 except Exception as e:
                     reply = f"Something went wrong: {e}"
             st.markdown(reply)
