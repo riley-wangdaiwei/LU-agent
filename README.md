@@ -1,10 +1,11 @@
 # LU Brain
 
-AI ops assistant for LU, a women's sports learning community.
+AI ops assistant for Lady Up, a women's sports learning community.
 Members chat with it to onboard, find tasks, break down deadlines, and report
 progress. Execs get a weekly chase list and only handle activation + exceptions.
 
-Live demo runs on Streamlit Community Cloud
+Live demo runs on Streamlit Community Cloud (free tier).
+
 ## What it does
 
 - **Chat** — talk to the team brain. Starter questions are shown up front
@@ -30,6 +31,18 @@ cp .env.example .env        # add your GEMINI_API_KEY (free at aistudio.google.c
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run app.py
 ```
+
+Optional: set `GEMINI_MODEL` in `.env` to switch models (default `gemini-3.5-flash-lite`).
+
+## Deploy (Streamlit Community Cloud, free)
+
+1. Push this repo to GitHub (already done).
+2. Go to share.streamlit.io → New app → pick the repo, main file `app.py`.
+3. App settings → Secrets, add:
+   ```toml
+   GEMINI_API_KEY = "your-key-here"
+   ```
+4. Deploy, then share the public link with the team.
 
 ## Updating the SST Brain
 
