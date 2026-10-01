@@ -63,8 +63,27 @@ Easiest method: open the file on github.com → pencil icon → edit → Commit 
 | `05_tracking.md` | Tracking log + weekly chase list | Agent maintains |
 
 One caveat: profiles saved **through chat on the deployed app** are written to
-the app's own filesystem, which Streamlit Cloud wipes on redeploy. Anything
-that must stick should be edited on GitHub — the repo is the source of truth.
+the app's own filesystem, which Streamlit Cloud wipes on redeploy. Enable
+GitHub sync (below) so those edits are pushed back to the repo automatically.
+
+## GitHub sync (member profiles)
+
+When a member confirms their onboarding profile in chat, the app can push
+`sst_brain/04_members.md` back to GitHub by itself:
+
+1. Create a fine-grained personal access token: GitHub → Settings →
+   Developer settings → Personal access tokens → Fine-grained →
+   select the `LU-agent` repo → Permissions → **Contents: Read and write**.
+2. In Streamlit: app settings → Secrets, add:
+   ```toml
+   GITHUB_TOKEN = "your-token-here"
+   ```
+3. Done. Each confirmed profile is committed to the **`brain-updates`**
+   branch (never `main`, so the live app doesn't reboot on every save).
+
+When you want the updates live: open the repo → compare `brain-updates`
+against `main` → merge. Streamlit redeploys automatically and the merged
+brain is what the app reads from then on.
 
 ## Project structure
 
