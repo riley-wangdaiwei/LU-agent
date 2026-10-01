@@ -23,3 +23,6 @@
 ## 2026-10-01 — Amelia confirmed deadlines
 - [ ] 2026-10-03 — Selena 排版与校对 (project: 科普文耐力)
 - [ ] 2026-10-05 — 终审并发布 (project: 科普文耐力)
+
+## 2026-10-01 — Amelia confirmed deadlines
+- [ ] 2026-10-01 — Amelia 提交耐力科普文稿件 (project: 科普文耐力)
