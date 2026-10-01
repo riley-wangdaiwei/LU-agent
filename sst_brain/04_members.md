@@ -24,3 +24,10 @@
 - resources: canva, website building, business analytics, creative writing
 - current_task: instagram posts
 - status: active
+
+### Amelia
+- interests: ['音乐', '自媒体', '语言']
+- availability: 约 3-4 小时每周，十一二月和明年三到五月非常忙
+- resources: 擅长写科普文
+- current_task: 在写耐力科普文
+- status: 比较忙
