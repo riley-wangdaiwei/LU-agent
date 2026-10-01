@@ -17,3 +17,10 @@
 ## 成员列表
 
 （待 exec 激活后逐个填写）
+
+### Riley
+- interests: ['writing', 'community growth', 'SEO', 'design']
+- availability: 5~8 hours per week, not busy recently
+- resources: canva, website building, business analytics, creative writing
+- current_task: instagram posts
+- status: active
