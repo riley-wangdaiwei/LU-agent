@@ -20,7 +20,7 @@
 4. 第 5 周：排版发布
 
 方法论（Protocol_I_W"打破偏见"式）：
-- 选题：先定一个核心问题（如"健身房为何女性不友好？是幻觉吗"）
+- 选题：先定一个核心问题（如"健身房为何女性不友好？是幻觉吗"）。exec发送成员，让他们参考“采访与撰文公约” https://docs.google.com/document/d/11mL9kY_6jJIflSifBj9jwqp14i6G66Y7k876nPG_YXM/edit?usp=drive_link
 - 写小问题：先做案头研究，不问能 Google 到的问题；问题按"审讯"逻辑从易到难
 - 采访：聊天式而非问询式，时刻准备追问和质疑，用细节撑起人物
 - 写文章：非虚构文学风格——一句话收获 + 真实故事 + 真诚的哲学收尾，忌添油加醋
@@ -32,9 +32,9 @@
 - 合作方资源：商业合作中接触到的品牌、学校、组织里的人
 - 定位不变：不追知名运动员，挖普通女性的真实故事
 
-### 公众号发布 checklist
-
+### 公众号排版和发布 checklist 
 视频号同步 → 附往期文章（记得 copy 最新一期）→ 写文章介绍 → 加 hashtag → 原创声明 → 查错别字 → 导到手机上预览。
+具体见guide https://drive.google.com/drive/folders/13td4vDTXj11FlGFMV9wpl9IPc6w_m947?usp=drive_link
 
 ### 科普文 pipeline
 
@@ -50,11 +50,16 @@ brainstorm 定选题（设 due）→ Research（每人找 3 篇论文）→ Draf
 ### 小红书 / 聊天室栏目（支线）
 
 聊天室栏目连载式（如"全红婵"第 3 期），有固定发布日；小红书还没正式做。
+具体见guide https://drive.google.com/drive/folders/16Am4Pqc0Y7dl4f2dcpIreq4cFCoWiF8p?usp=drive_link
+
+### Instagram pipeline
+见guide https://drive.google.com/drive/folders/1vgIfPq_2-fSGQ1bmqe199eeU1gTtlVMv?usp=drive_link
 
 ### 内容分发：1 → 5 repurposing 系统
 
 > 详见 Drive「社会项目 / 渠道分发」。一篇原始内容拆成五个平台各自的产品形态，而不是简单剪短。
 > 先跑 3 个 pilot series：**LU Stories**（人物，一个故事一个观点）→ IG / TikTok / YouTube Shorts / 小红书；**LU Explains**（知识，60 秒讲清一个问题）→ TikTok / 小红书 / IG Reels / YouTube Shorts；**LU Field Notes**（深度，真研究一个问题）→ Substack / YouTube / IG carousel。
+> 目前在做IG carousel。
 > 原则：不需要先重新采访，先用现有 20+ 篇内容做 30–50 个切片，测试出有效 format 再决定要不要加 production。
 
 ### 播客 LU Talk
@@ -69,7 +74,7 @@ brainstorm 定选题（设 due）→ Research（每人找 3 篇论文）→ Draf
 - **荣誉顾问委员会**：卸任 exec，指导 + 知识代际延续
 - **普通成员**：项目负责人（谁联系受访者谁当）、视频剪辑师、撰稿人/文章编辑、采访协调员
 
-## StemLU 代币（表现评估）
+## StemLU 代币（表现评估）（目前暂停运营）
 
 > 团队负责人 2026-09-30：具体分值不重要，先按《StemLU 使用手册》版定基线，后续可调。
 > 参会 +5、讨论 +10、创意 +15、领导项目 +40、采访 +15、剪辑 +10、撰稿 +25~30、编辑 +10、双人协作 +10、线下见面 +20；无故缺席 −15、不交会前报告 −15、长期失联 −30。
