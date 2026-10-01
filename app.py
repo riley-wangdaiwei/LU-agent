@@ -39,7 +39,13 @@ STARTERS = [
 
 # ---------- GitHub sync ----------
 def github_push_file(rel_path: str, branch: str = "brain-updates") -> tuple:
-    """Push one brain file to GitHub so runtime edits survive redeploys."""
+    """Push one brain file to GitHub so runtime edits survive redeploys.
+
+    Uses GITHUB_TOKEN from env / Streamlit Secrets (needs Contents: read+write
+    on the repo). Pushes to a side branch, NOT main, so the live Streamlit app
+    doesn't reboot on every save. Merge the branch to main on github.com when
+    ready — that redeploys the app with the merged brain.
+    """
     import base64, json, urllib.request, urllib.error
     token = os.getenv("GITHUB_TOKEN")
     if not token:
@@ -49,37 +55,50 @@ def github_push_file(rel_path: str, branch: str = "brain-updates") -> tuple:
     headers = {"Authorization": f"Bearer {token}",
                "Accept": "application/vnd.github+json",
                "User-Agent": "lu-brain"}
+
     def req(method, url, data=None):
-        r = urllib.request.Request(url, method=method,
+        r = urllib.request.Request(
+            url, method=method,
             data=json.dumps(data).encode() if data else None,
             headers={**headers, "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(r, timeout=20) as resp:
                 return resp.status, json.loads(resp.read() or b"{}")
         except urllib.error.HTTPError as e:
-            try: body = json.loads(e.read() or b"{}")
-            except Exception: body = {}
+            try:
+                body = json.loads(e.read() or b"{}")
+            except Exception:
+                body = {}
             return e.code, body
+
+    # ensure the side branch exists (created from main on first use)
     status, _ = req("GET", f"{base}/branches/{branch}")
     if status == 404:
         status, main = req("GET", f"{base}/branches/main")
-        if status != 200: return False, "cannot read main"
+        if status != 200:
+            return False, "cannot read main"
         status, _ = req("POST", f"{base}/git/refs",
-            {"ref": f"refs/heads/{branch}", "sha": main["commit"]["sha"]})
-        if status not in (200, 201): return False, "cannot create branch"
-    elif status != 200: return False, "branch check failed"
+                        {"ref": f"refs/heads/{branch}",
+                         "sha": main["commit"]["sha"]})
+        if status not in (200, 201):
+            return False, "cannot create branch"
+    elif status != 200:
+        return False, "branch check failed"
+
     content = base64.b64encode((BASE / rel_path).read_bytes()).decode()
-    for _ in range(2):
+    for _ in range(2):  # one retry on SHA conflict
         status, cur = req("GET", f"{base}/contents/{rel_path}?ref={branch}")
         sha = cur.get("sha") if status == 200 else None
         payload = {"message": f"Sync {rel_path} from LU Brain app",
                    "content": content, "branch": branch}
-        if sha: payload["sha"] = sha
+        if sha:
+            payload["sha"] = sha
         status, _ = req("PUT", f"{base}/contents/{rel_path}", payload)
-        if status in (200, 201): return True, "ok"
-        if status != 409: return False, f"github {status}"
+        if status in (200, 201):
+            return True, "ok"
+        if status != 409:
+            return False, f"github {status}"
     return False, "conflict"
-
 
 # ---------- Brain ----------
 def read_brain() -> dict:
@@ -112,6 +131,8 @@ Answer from it. Never invent facts that are not in the brain.
 
 Style: plain, warm, concise. No emojis. Reply in English by default;
 if the user writes in Chinese, reply in Chinese.
+Pace yourself: advance one step per turn. Never dump onboarding, next steps,
+and brainstorming into a single reply.
 
 Your capabilities:
 1. ONBOARDING (proactive): when a new member arrives, YOU start the conversation.
@@ -123,6 +144,18 @@ Your capabilities:
    When all six are collected, output a ```profile fenced code block with JSON
    (keys: name, interests, availability, resources, current_task, status),
    then ask the user to confirm.
+   After the profile is confirmed and saved, do POST-ONBOARDING ACTIVATION
+   (one thing at a time, conversationally): (a) briefly introduce the three
+   work types from the brain — interview pieces, explainer articles, roundtable
+   discussions; (b) propose 3 concrete first steps, then confirm a deadline for
+   each (capability 5): 1) follow the team's Instagram and WeChat public account
+   and write their 1-2 sentence self-intro (offer to draft it with them; when the
+   intro is final, output a ```activation fenced code block with JSON
+   {"member": "<name>", "intro": "<1-2 sentences>"} and tell them an exec will
+   add them to the main group, where they post the intro themselves);
+   2) add at least one exec on WeChat; 3) pick the track that interests them most
+   and produce a small project-direction deliverable (e.g. bullet points on
+   topics and guests they find interesting).
 2. Answer questions about team protocols, workflows, and project schedules.
 3. Match members with tasks: recommend from active projects and workflows based
    on their interests, availability, and resources.
@@ -131,16 +164,28 @@ Your capabilities:
    or their next steps, work backwards from the big deadline using the workflow
    in the brain (e.g. the 5-week interview cycle: contact -> schedule -> draft ->
    publish). Give them their NEXT 3 concrete steps with suggested dates, small
-   enough to act on this week. Then ALWAYS confirm deadlines: propose one specific
+   enough to act on this week. The first step is always a concrete, visible
+   deliverable (a short intro, a bullet-points doc) — never "think about it".
+   Then ALWAYS confirm deadlines: propose one specific
    calendar date per step and ask the member to confirm or adjust each one,
    conversing naturally until all three dates are fixed. When the member confirms,
    output a ```deadlines fenced code block with JSON:
    {"member": "<name>", "items": [{"step": "<step>", "deadline": "YYYY-MM-DD",
    "project": "<project>"}, ...]}. Then tell them these deadlines are now on the
    exec chase list so an exec will follow up on each one.
-6. WEEKLY CHASE LIST (for execs): members awaiting activation / overdue tasks /
-   no activity for two weeks / items needing the team lead or exec to decide.
+6. WEEKLY CHASE LIST (for execs): confirmed deadlines first (from the tracking
+   log, soonest first, overdue flagged), then silent members to re-engage, then
+   members awaiting activation (if a member's intro is ready in the tracking log,
+   include it in the reminder line so the exec can forward it when adding them
+   to the group), then items needing the team lead or exec to decide.
    Each item gets one short, copy-paste-ready reminder line.
+7. TOPIC BRAINSTORM: when a member wants a project direction but has none,
+   combine their interests with their skills/resources from their profile
+   (e.g. gender studies background x football hobby) and propose 3-5 SPECIFIC
+   topic angles plus concrete potential interview subjects or guests for each.
+   Ask which resonates, refine round by round — never settle for vague themes.
+   End with a concrete deliverable: the member sends bullet points on their
+   chosen topics/guests within a week, then flow into deadline confirmation.
 
 You never make decisions for people: task assignment and schedule changes are
 suggestions only — tell the user to confirm with an exec or the team lead.
@@ -290,6 +335,16 @@ if nav == "Chat":
         except Exception:
             return None
 
+    def extract_activation(text: str):
+        m = re.search(r"```activation\s*(\{.*?\})\s*```", text, re.S)
+        if not m:
+            return None
+        import json
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            return None
+
     def send_and_reply(user_text: str):
         st.session_state.messages.append({"role": "user", "text": user_text})
         with st.chat_message("user"):
@@ -305,6 +360,7 @@ if nav == "Chat":
         st.session_state.messages.append({"role": "assistant", "text": reply})
         st.session_state.profile_saved = False
         st.session_state.deadlines_saved = False
+        st.session_state.activation_saved = False
 
     # Starter questions (only before the conversation starts)
     if not st.session_state.messages:
@@ -370,6 +426,29 @@ if nav == "Chat":
                     st.caption(f"GitHub sync skipped ({msg}). Add GITHUB_TOKEN "
                                "to Secrets to sync automatically.")
 
+    # Pending activation (intro ready -> exec adds member to the group)
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
+        act = extract_activation(st.session_state.messages[-1]["text"])
+        if act and not st.session_state.get("activation_saved"):
+            st.info("Intro ready. Save it so an exec can add this member to the group:")
+            st.code(act.get("intro", ""), language=None)
+            if st.button("Save to activation list", type="primary"):
+                p = BRAIN_DIR / "05_tracking.md"
+                cur = p.read_text(encoding="utf-8") if p.exists() else ""
+                today = datetime.date.today().isoformat()
+                member = act.get("member") or st.session_state.get("identity", "")
+                lines = [f"\n## {today} — {member} ready for group activation",
+                         f"- [ ] Add {member} to the main group. Intro: {act.get('intro', '')}"]
+                p.write_text(cur.rstrip() + "\n" + "\n".join(lines) + "\n", encoding="utf-8")
+                st.session_state.activation_saved = True
+                ok, msg = github_push_file("sst_brain/05_tracking.md")
+                if ok:
+                    st.success("Saved and synced to GitHub (brain-updates branch).")
+                else:
+                    st.success("Saved in the app.")
+                    st.caption(f"GitHub sync skipped ({msg}). Add GITHUB_TOKEN "
+                               "to Secrets to sync automatically.")
+
     if prompt := st.chat_input("Message LU Brain..."):
         send_and_reply(prompt)
         st.rerun()
@@ -400,7 +479,9 @@ else:
                       "count — the exec chases all of them. "
                       "2) SILENT MEMBERS: members with no activity for two weeks or more (check the tracking "
                       "log and member profiles). The exec should reach out and ask what they can do now. "
-                      "3) Members awaiting activation. "
+                      "3) Members awaiting activation (if an intro is ready in the tracking log, "
+                      "include it in the reminder line so the exec can forward it when adding "
+                      "them to the group). "
                       "4) Items needing the team lead or exec to decide. "
                       "Each item gets one short reminder line the exec can forward as-is. "
                       "If information is missing, say so plainly instead of inventing it.")
