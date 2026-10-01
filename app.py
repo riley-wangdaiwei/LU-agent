@@ -96,7 +96,7 @@ suggestions only — tell the user to confirm with an exec or the team lead.
 """
 
 def chat_once(client, history: list, user_msg: str, identity_note: str = "") -> str:
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
     contents = []
     for h in history:
         contents.append({"role": h["role"], "parts": [{"text": h["text"]}]})
