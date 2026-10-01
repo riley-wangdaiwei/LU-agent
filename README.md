@@ -18,8 +18,9 @@ Live demo runs on Streamlit Community Cloud (free tier).
   through the team workflow (e.g. the 5-week interview cycle) to produce the
   next 3 concrete steps with suggested dates.
 - **Brain** — browse the shared knowledge base (SST Brain).
-- **Chase List** — one click generates the weekly list: members awaiting
-  activation, overdue tasks, two weeks of silence, items needing a decision.
+- **Chase List** — one click generates the weekly list, led by confirmed
+  deadlines (big and small — the exec chases every one) and silent members to
+  re-engage, plus members awaiting activation and items needing a decision.
   Each item comes with a short line the exec can forward as-is.
 
 ## Run locally
