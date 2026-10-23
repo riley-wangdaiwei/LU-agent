@@ -24,3 +24,10 @@
 - resources: canva, website building, business analytics, creative writing
 - current_task: instagram posts
 - status: active
+
+### Melinda
+- interests: ['gender equality in sports', 'sports apparel', "women's health", 'medical research bias']
+- availability: Weekends (all day Saturday, Sunday morning); very busy until November 1st
+- resources: Writing, research, design, microbiology background
+- current_task: Brainstorming the growth hormone article
+- status: busy
