@@ -25,9 +25,9 @@
 - current_task: instagram posts
 - status: active
 
-### Amelia
-- interests: ['音乐', '自媒体', '语言']
-- availability: 约 3-4 小时每周，十一二月和明年三到五月非常忙
-- resources: 擅长写科普文
-- current_task: 在写耐力科普文
-- status: 比较忙
+### Melinda
+- interests: ['gender equality in sports', 'sports apparel', "women's health", 'medical research bias']
+- availability: Weekends (all day Saturday, Sunday morning); very busy until November 1st
+- resources: Writing, research, design, microbiology background
+- current_task: Brainstorming the growth hormone article
+- status: busy
