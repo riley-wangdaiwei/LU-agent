@@ -31,3 +31,10 @@
 - resources: Writing, research, design, microbiology background
 - current_task: Brainstorming the growth hormone article
 - status: busy
+
+### Chloé Huang
+- interests: ['photography', 'language learning', 'financial technology', 'project management']
+- availability: 10-15 hours per week; busy in November (admission interviews) and December (internship matters)
+- resources: Strong relationship-building and engagement skills, business student perspective for public account content, badminton club activities at SISU, brand partner connections
+- current_task: Designing badminton club competitions and activities at SISU, and maintaining brand partner connections
+- status: active
