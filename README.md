@@ -1,33 +1,31 @@
-# LU Brain
+# LU — Team Conversation
 
-AI ops assistant for Lady Up, a women's sports learning community.
-Members chat with it to onboard, find tasks, break down deadlines, and report
-progress. Execs get a weekly chase list and only handle activation + exceptions.
+LU is the central coordination assistant for Lady Up. The app follows one
+scrolling flow: **Talk → Present → Act → Remember**. Members onboard, share
+progress and blockers conversationally, review structured updates, and confirm
+what should be written to the SST Brain.
 
 Live demo runs on Streamlit Community Cloud (free tier).
 
 ## What it does
 
-- **Team Overview** — a shared view of the projects, member updates, and
-  follow-ups already recorded in the SST Brain.
-- **Chat** — talk to the team brain. Starter questions are shown up front
-  ("Who am I on the team?", "What projects can I join?", "What are the
-  deadlines for my project?", "What are my next 3 steps?").
-- **Onboarding** — new members tap "I am new here" and the agent walks them
-  through 6 quick questions, one at a time (under 3 minutes). The profile is
-  saved to the member list after confirmation. Existing members can ask LU to
-  update their profile.
-- **Projects** — a readable view of active project status and the next steps
-  recorded in the SST. Report changes through LU Chat.
-- **Schedule breakdown** — give it a project deadline and it works backwards
-  through the team workflow (e.g. the 5-week interview cycle) to produce the
-  next 3 concrete steps with suggested dates.
-- **SST Brain** — search the shared knowledge base and preview/download a
-  poster-like Team Snapshot PDF built from its current data.
-- **Chase List** — one click generates the weekly list, led by confirmed
-  deadlines (big and small — the exec chases every one) and silent members to
-  re-engage, plus members awaiting activation and items needing a decision.
-  Each item comes with a short line the exec can forward as-is.
+- **Kettle-led flow** — a persistent tea kettle image anchors the dark, glass
+  interface as people scroll from identity to conversation and SST.
+- **Conversational updates** — LU uses the existing Gemini agent and SST
+  context for onboarding, project questions, scheduling, and progress reports.
+- **Confirm before writing** — profile, progress, deadline, and activation
+  updates are presented for confirmation before being saved.
+- **SST Brain** — search and read the team's existing Markdown knowledge base.
+- **Team Snapshot** — an editorial report preview with PDF and PNG downloads
+  generated from current project, member, update, and tracking data. Members
+  whose SST profile explicitly identifies an executive role see an executive
+  weekly-brief presentation.
+
+The app currently has no authentication or permission backend. Executive
+presentation is based on the saved profile role, not a protected authorization
+boundary; do not treat it as access control. Team Snapshot downloads are
+available to all app visitors because the existing app has no authentication
+or permission backend.
 
 ## Run locally
 
@@ -94,11 +92,12 @@ brain is what the app reads from then on.
 
 ## Project structure
 
-- `app.py` — the Streamlit app (Team Overview / LU Chat / Projects / SST Brain)
+- `app.py` — Agent, SST parsing/writes, and app entry point
+- `hub_ui.py` — single-page scrolling Talk / Present / Act / Remember interface
 - `requirements.txt` — Python dependencies
 - `.env.example` — copy to `.env`, add your key (never commit `.env`)
 - `sst_brain/` — the shared knowledge base (6 Markdown files)
-- `assets/` — Lady Up logo
+- `assets/` — brand assets, including the floating kettle-and-cloth hero
 
 ## Security note
 
