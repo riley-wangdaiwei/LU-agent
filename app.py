@@ -5,7 +5,10 @@ Run: streamlit run app.py
 Requires env var: GEMINI_API_KEY (see .env.example)
 """
 import datetime
+import base64
+import html
 import hashlib
+from io import BytesIO
 import json
 import os
 import re
@@ -19,9 +22,6 @@ load_dotenv()
 BASE = Path(__file__).parent
 BRAIN_DIR = BASE / "sst_brain"
 ASSETS = BASE / "assets"
-
-PINK = "#EB5D73"
-GREEN = "#02C64F"
 
 BRAIN_FILES = {
     "Overview": "00_overview.md",
@@ -163,7 +163,7 @@ def apply_progress_update(prog: dict) -> dict:
 
     p = BRAIN_DIR / "03_active_projects.md"
     cur = p.read_text(encoding="utf-8") if p.exists() else "# Active Projects\n"
-    heads = list(re.finditer(r"^## (.+)$", cur, re.M))
+    heads = list(re.finditer(r"^-?\s*## (.+)$", cur, re.M))
     target = None
     for i, m in enumerate(heads):
         if _norm_name(project) and (_norm_name(project) in _norm_name(m.group(1))
@@ -219,7 +219,7 @@ def parse_projects() -> list:
     if not p.exists():
         return []
     text = p.read_text(encoding="utf-8")
-    heads = list(re.finditer(r"^## (.+)$", text, re.M))
+    heads = list(re.finditer(r"^-?\s*## (.+)$", text, re.M))
     out = []
     for i, m in enumerate(heads):
         body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
@@ -229,8 +229,146 @@ def parse_projects() -> list:
             return mm.group(1).strip() if mm else ""
         out.append({"name": m.group(1).strip(), "status": field("状态"),
                     "next_step": field("下一步"), "next_deadline": field("下次截止"),
-                    "completed": field("上一步已完成")})
+                    "completed": field("上一步已完成"),
+                    "team": field("团队"), "schedule": field("排期"),
+                    "blocker": field("阻塞") or field("blocker")})
     return out
+
+def parse_members() -> list:
+    """Read the member profiles already stored in the SST."""
+    p = BRAIN_DIR / "04_members.md"
+    if not p.exists():
+        return []
+    text = p.read_text(encoding="utf-8")
+    heads = list(re.finditer(r"^### (.+)$", text, re.M))
+    members = []
+    for i, match in enumerate(heads):
+        body = text[match.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        fields = {}
+        for line in body.splitlines():
+            field = re.match(r"^- ([\w\u4e00-\u9fff]+):\s*(.*)$", line)
+            if field:
+                fields[field.group(1).lower()] = field.group(2).strip()
+        members.append({
+            "name": match.group(1).strip(),
+            "role": fields.get("role", ""),
+            "status": fields.get("status", ""),
+            "current_task": fields.get("current_task", ""),
+            "interests": fields.get("interests", ""),
+            "availability": fields.get("availability", ""),
+        })
+    return members
+
+def parse_recent_updates(limit: int = 5) -> list:
+    """Return dated log entries, without inferring activity from project state."""
+    p = BRAIN_DIR / "05_tracking.md"
+    if not p.exists():
+        return []
+    entries = []
+    current = ""
+    for line in p.read_text(encoding="utf-8").splitlines():
+        heading = re.match(r"^## (\d{4}-\d{2}-\d{2}) — (.+)$", line)
+        if heading:
+            current = f"{heading.group(1)} · {heading.group(2)}"
+        elif current and line.startswith("- "):
+            entries.append({"heading": current, "text": line[2:].strip()})
+    return entries[-limit:][::-1]
+
+def make_snapshot_pdf(projects: list, members: list, updates: list,
+                      deadlines: list, blockers: list) -> bytes:
+    """Create a one-page, source-backed team poster as a downloadable PDF."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A3, landscape
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.pdfgen import canvas
+
+    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    page_width, page_height = landscape(A3)
+    stream = BytesIO()
+    pdf = canvas.Canvas(stream, pagesize=(page_width, page_height))
+    ink = colors.HexColor("#21232A")
+    muted = colors.HexColor("#6C7180")
+    blue = colors.HexColor("#6078D6")
+    paper = colors.HexColor("#F4F2EE")
+    lilac = colors.HexColor("#E8E8F1")
+    pdf.setFillColor(paper)
+    pdf.rect(0, 0, page_width, page_height, fill=1, stroke=0)
+
+    margin, gap = 48, 20
+    pdf.setFillColor(ink)
+    pdf.roundRect(margin, page_height - 174, page_width - margin * 2, 126, 18, fill=1, stroke=0)
+    pdf.setFillColor(colors.white)
+    pdf.setFont("STSong-Light", 31)
+    pdf.drawString(margin + 28, page_height - 100, "TEAM SNAPSHOT")
+    pdf.setFont("STSong-Light", 13)
+    pdf.setFillColor(colors.HexColor("#D7D9E5"))
+    pdf.drawString(margin + 30, page_height - 130, "People update. LU coordinates. SST remembers.")
+    pdf.setFont("STSong-Light", 11)
+    pdf.drawRightString(page_width - margin - 28, page_height - 100,
+                        datetime.date.today().isoformat())
+
+    col_width = (page_width - margin * 2 - gap) / 2
+    top = page_height - 198
+    bottom = 54
+    row_gap = 18
+    row_height = (top - bottom - row_gap) / 2
+
+    def card(x, y, w, h, title, lines, fill=colors.white, max_lines=9):
+        pdf.setFillColor(fill)
+        pdf.roundRect(x, y, w, h, 14, fill=1, stroke=0)
+        pdf.setFillColor(blue)
+        pdf.setFont("STSong-Light", 10)
+        pdf.drawString(x + 18, y + h - 25, title.upper())
+        pdf.setFillColor(ink)
+        pdf.setFont("STSong-Light", 11)
+        cursor = y + h - 49
+        for text in lines[:max_lines]:
+            text = str(text).replace("\n", " ")
+            chunks = [text[i:i + 60] for i in range(0, len(text), 60)] or [""]
+            for chunk in chunks:
+                if cursor < y + 13:
+                    return
+                pdf.drawString(x + 18, cursor, chunk)
+                cursor -= 16
+
+    left = margin
+    right = margin + col_width + gap
+    row2_y = bottom
+    row1_y = bottom + row_height + row_gap
+    project_lines = [
+        f"{item['name']}  ·  {item['status'] or '状态未填写'}"
+        for item in projects
+    ]
+    member_lines = [
+        f"{item['name']}"
+        + (f" / {item['role']}" if item.get("role") else "")
+        + (f"  ·  {item['current_task']}" if item.get("current_task") else "")
+        + (f"  ·  {item['status']}" if item.get("status") else "")
+        for item in members
+    ]
+    update_lines = [f"{item['heading']} — {item['text']}" for item in updates]
+    deadline_lines = [
+        f"Next: {item['name']} · {item['next_step']}"
+        for item in projects if item.get("next_step")
+    ] + [
+        f"{item['deadline']} · {item['step']}"
+        + (f" ({item['project']})" if item.get("project") else "")
+        for item in deadlines
+    ]
+    card(left, row1_y, col_width, row_height, "Project pulse", project_lines, lilac, max_lines=14)
+    card(right, row1_y, col_width, row_height, "Team & responsibilities", member_lines)
+    card(left, row2_y, col_width, row_height, "Recent notes", update_lines)
+    card(right, row2_y, col_width, row_height, "Next · blockers", [
+        *[f"Next: {line}" for line in deadline_lines],
+        *[f"Blocker: {line}" for line in blockers],
+        *(["No next steps or blockers recorded in SST."] if not deadline_lines and not blockers else []),
+    ], lilac)
+    pdf.setFillColor(muted)
+    pdf.setFont("STSong-Light", 8)
+    pdf.drawString(margin, 30, "Generated from the LU SST Brain · Responsibilities and decisions stay with the team.")
+    pdf.save()
+    return stream.getvalue()
 
 def parse_tracking():
     """Parse 05 into (deadline items, activation items, other items,
@@ -317,8 +455,11 @@ Your capabilities:
    When all six are collected, output a ```profile fenced code block with JSON
    (keys: name, interests, availability, resources, current_task, status),
    then ask the user to confirm.
-   After the profile is confirmed and saved, do POST-ONBOARDING ACTIVATION
-   (one thing at a time, conversationally): (a) briefly introduce the three
+   Existing members can also ask to update their profile. Ask only for the
+   changed information, then output the same profile block with all known
+   values so the member can confirm the update.
+   After a new member's profile is confirmed and saved, do POST-ONBOARDING
+   ACTIVATION (one thing at a time, conversationally): (a) briefly introduce the three
    work types from the brain — interview pieces, explainer articles, roundtable
    discussions; (b) propose 3 concrete first steps, then confirm a deadline for
    each (capability 5): 1) follow the team's Instagram and WeChat public account
@@ -426,65 +567,160 @@ def identity_note() -> str:
             "Use this to personalize answers (identity questions, task "
             "matching, deadlines, progress).")
 
+def save_member_profile(profile: dict) -> str:
+    """Create or update a member section while retaining known fields."""
+    path = BRAIN_DIR / "04_members.md"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    name = str(profile.get("name") or "New member").strip()
+    heading = re.compile(rf"^### {re.escape(name)}\s*$", re.M)
+    match = heading.search(text)
+    start = match.start() if match else len(text)
+    next_heading = re.search(r"^### .+$", text[match.end():], re.M) if match else None
+    end = match.end() + next_heading.start() if next_heading else len(text)
+    existing_body = text[match.end():end] if match else ""
+    fields = {}
+    for line in existing_body.splitlines():
+        field = re.match(r"^- ([\w\u4e00-\u9fff]+):\s*(.*)$", line)
+        if field:
+            fields[field.group(1)] = field.group(2).strip()
+    for key, value in profile.items():
+        if key != "name" and value not in (None, ""):
+            fields[key] = str(value).strip()
+    preferred_order = ["role", "interests", "availability", "resources",
+                       "current_task", "status"]
+    keys = [key for key in preferred_order if key in fields]
+    keys.extend(key for key in fields if key not in keys)
+    section = "### " + name + "\n" + "".join(
+        f"- {key}: {fields[key]}\n" for key in keys
+    )
+    updated = text[:start].rstrip() + ("\n\n" if text[:start].strip() else "")
+    updated += section
+    if end < len(text):
+        updated += "\n" + text[end:].lstrip("\n")
+    path.write_text(updated.rstrip() + "\n", encoding="utf-8")
+    return name
+
+def navigate_to(page: str, identity: str = ""):
+    st.session_state.nav = page
+    if identity:
+        st.session_state.identity = identity
+
 # ---------- Page ----------
-st.set_page_config(page_title="LU Brain", page_icon=None, layout="wide")
+st.set_page_config(page_title="LU · Team Coordination", page_icon=None, layout="wide")
 
 st.markdown(f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');
+:root {{
+    --paper: #F3F4F8; --white: rgba(255,255,255,.82); --ink: #242630; --muted: #777B8B;
+    --line: #E2E4ED; --lilac: #E9EAF3; --blue: #7185F5; --blue-dark: #5068D8;
+    --cyan: #92C4FF; --violet: #9B8CFF;
+    --green: #2F795D; --amber: #B77A2D; --rose: #B95F69;
+}}
 html, body, [class*="css"] {{
-    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
-    background: #ffffff; color: #000000;
+    font-family: 'DM Sans', 'Helvetica Neue', Arial, sans-serif;
+    background: radial-gradient(ellipse at 18% 0%, rgba(119,134,235,.10), transparent 42%), var(--paper);
+    color: var(--ink);
 }}
-h1, h2, h3 {{ font-family: -apple-system, "Helvetica Neue", Arial, sans-serif !important;
-          color: #000; letter-spacing: 0.01em; }}
-.page-title {{ color: {GREEN} !important; }}
-.block-container {{ max-width: 820px; padding-top: 2rem; }}
-a {{ color: {PINK} !important; }}
-hr {{ border: none; border-top: 1px solid #000; opacity: 0.15; }}
+[data-testid="stAppViewContainer"], [data-testid="stMain"] {{
+    background: radial-gradient(ellipse at 18% 0%, rgba(119,134,235,.10), transparent 42%), var(--paper) !important;
+}}
+h1, h2, h3 {{ color: var(--ink); letter-spacing: -0.035em; }}
+.block-container {{ max-width: 1420px; padding: 2.2rem 3.2rem 4rem; }}
+.serif {{ font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; }}
+.eyebrow, .mono {{ font-family: 'DM Mono', monospace; letter-spacing: .08em; text-transform: uppercase; }}
+.eyebrow {{ color: var(--blue); font-size: .72rem; }}
+a {{ color: var(--blue-dark) !important; }}
+hr {{ border: none; border-top: 1px solid var(--line); margin: 1.5rem 0; }}
 .stButton > button {{
-    border-radius: 999px; border: 1px solid #000;
-    background: #fff; color: #000; font-size: 0.85rem;
+    border-radius: 999px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.86); color: var(--ink); font-size: .86rem; padding: .5rem 1rem;
+    transition: all .22s ease; box-shadow: 0 4px 14px rgba(48,55,91,.04);
 }}
-.stButton > button:hover {{ border-color: {PINK}; color: {PINK}; }}
-.stButton > button[kind="primary"] {{ background: {PINK}; border-color: {PINK}; color: #fff; }}
-.stButton > button[kind="primary"]:hover {{ background: #d14a60; color: #fff; }}
-.brain-card {{
-    background: #fff; border: 1px solid #000; border-radius: 4px;
-    padding: 1.2rem 1.4rem;
+.stButton > button:hover {{ border-color: var(--blue); color: var(--blue-dark); transform: translateY(-2px); box-shadow: 0 9px 24px rgba(84,104,214,.14); }}
+.stButton > button[kind="primary"] {{ background: linear-gradient(115deg,#6479E8,#7F75E8); border-color: transparent; color: #fff; box-shadow: 0 7px 20px rgba(92,109,224,.22); }}
+.stButton > button[kind="primary"]:hover {{ background: linear-gradient(115deg,#536BD9,#6E63D8); color: #fff; box-shadow: 0 10px 28px rgba(92,109,224,.3); }}
+.stChatMessage {{ background: var(--white); border: 1px solid var(--line); border-radius: 18px; }}
+section[data-testid="stSidebar"] {{ background: rgba(235,237,245,.92); border-right: 1px solid rgba(212,216,231,.9); backdrop-filter: blur(18px); }}
+section[data-testid="stSidebar"] > div {{ padding-top: 1.5rem; }}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label {{ font-size: .93rem; }}
+section[data-testid="stMain"] {{ background: var(--paper); }}
+.stTabs [data-baseweb="tab"][aria-selected="true"],
+.stTabs button[role="tab"][aria-selected="true"] {{
+    color: var(--blue-dark) !important; border-bottom-color: var(--blue) !important;
 }}
-.accent-pink {{ color: {PINK}; font-weight: 600; }}
-.accent-green {{ color: {GREEN}; font-weight: 600; }}
-.stChatMessage {{ background: #fff; }}
-section[data-testid="stSidebar"] {{ background: #fff; border-right: 1px solid #000; }}
+.hero {{
+    background: radial-gradient(ellipse at 88% 18%,rgba(113,133,245,.34),transparent 40%),
+                radial-gradient(ellipse at 10% 100%,rgba(109,120,204,.18),transparent 42%), #232530;
+    border: 1px solid rgba(255,255,255,.11); border-radius: 26px; color: #fff; overflow: hidden;
+    min-height: 390px; padding: 3.25rem 3rem; position: relative;
+    box-shadow: 0 28px 75px rgba(42,47,83,.19), inset 0 1px 0 rgba(255,255,255,.12);
+    isolation: isolate;
+}}
+.hero:before {{
+    content: ""; position: absolute; inset: 0; z-index: -1; opacity: .16;
+    background-image: linear-gradient(rgba(196,204,255,.24) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(196,204,255,.24) 1px, transparent 1px);
+    background-size: 34px 34px; mask-image: linear-gradient(135deg,black,transparent 72%);
+}}
+.hero-visual {{ min-height: 570px; }}
+.hero h1 {{ color: #fff; font: 400 clamp(2.8rem, 4vw, 4.2rem) 'DM Serif Display', Georgia, serif !important; line-height: .98; margin: .8rem 0 1.1rem; }}
+.hero p {{ color: #D0D0D9; font-size: 1.05rem; line-height: 1.7; max-width: 540px; }}
+.hero-kettle {{ width: 100%; max-height: 345px; object-fit: contain; filter: drop-shadow(0 18px 34px rgba(0,0,0,.4)) drop-shadow(0 0 34px rgba(146,177,255,.22)); animation: float 6s ease-in-out infinite; }}
+@keyframes float {{ 0%,100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-9px); }} }}
+.surface {{ background: var(--white); backdrop-filter: blur(14px); border: 1px solid rgba(219,222,235,.9); border-radius: 18px; padding: 1.25rem 1.4rem; box-shadow: 0 10px 28px rgba(37,43,78,.045); transition: transform .22s ease, box-shadow .22s ease; }}
+.surface:hover {{ transform: translateY(-2px); box-shadow: 0 16px 34px rgba(37,43,78,.09); }}
+.surface-lilac {{ background: linear-gradient(135deg,rgba(233,234,244,.94),rgba(243,244,249,.8)); border: 1px solid rgba(216,220,236,.95); border-radius: 18px; padding: 1.25rem 1.4rem; }}
+.metric {{ font: 500 2rem 'DM Mono', monospace; letter-spacing: -.08em; color: var(--ink); background:linear-gradient(100deg,#343849,#6479D6);-webkit-background-clip:text;-webkit-text-fill-color:transparent; }}
+.project-title {{ font: 400 1.35rem 'DM Serif Display', Georgia, serif; color: var(--ink); }}
+.status {{ display:inline-block; padding:.25rem .6rem; border-radius:99px; font:500 .68rem 'DM Mono',monospace; text-transform:uppercase; letter-spacing:.04em; background:#ECEBF0; color:#646573; }}
+.status-active {{ background:#E2EFE7; color:#2F795D; }}
+.status-blocked {{ background:#F8E8E7; color:#A64852; }}
+.status-progress {{ background:#E8EAF8; color:#5268C3; }}
+.small-muted {{ color:var(--muted); font-size:.86rem; line-height:1.55; }}
+.section-title {{ font:400 2rem 'DM Serif Display', Georgia, serif; letter-spacing:-.02em; }}
+.step-card {{ border-top:1px solid var(--line); padding:1rem 0 .4rem; }}
+.poster {{ background:radial-gradient(ellipse at 95% 0%,rgba(113,133,245,.38),transparent 42%),#252630; color:#fff; border:1px solid rgba(255,255,255,.12); border-radius:24px; padding:2rem; box-shadow:0 20px 60px rgba(39,44,77,.18); }}
+.poster h2 {{ color:#fff; font:400 2.8rem 'DM Serif Display', Georgia, serif; }}
+@media (max-width: 800px) {{
+    .block-container {{ padding: 1.3rem 1rem 3rem; }}
+    .hero {{ padding: 2rem 1.5rem; min-height: unset; }}
+    .hero-visual {{ min-height: 340px; }}
+    .hero h1 {{ font-size: 3.3rem; }}
+}}
 </style>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
     logo = ASSETS / "lu_new_1.png"
     if logo.exists():
-        st.image(str(logo), width=72)
-    st.markdown('<h2 class="page-title">LU Brain</h2>', unsafe_allow_html=True)
-    st.caption("Lady Up team ops assistant")
-    nav = st.radio("Navigate", ["Chat", "Brain", "Chase List"], label_visibility="collapsed")
+        st.image(str(logo), width=58)
+    st.markdown('<h3 style="margin:.25rem 0 0">LU <span style="font-weight:400">/ team hub</span></h3>', unsafe_allow_html=True)
+    st.caption("People update · LU coordinates · SST remembers")
+    nav = st.radio(
+        "Navigate",
+        ["Team Overview", "LU Chat", "Projects", "SST Brain"],
+        key="nav",
+        label_visibility="collapsed",
+    )
     st.divider()
     names = get_member_names()
     st.selectbox(
-        "Chatting as",
+        "Your team identity",
         ["Not identified"] + names + ["I'm new here"],
         key="identity",
-        help="Pick your name so the agent knows who you are.",
+        help="Choose your name so LU can personalize your updates. New here? Start onboarding in LU Chat.",
     )
     if st.session_state.get("identity") not in (None, "Not identified", "I'm new here"):
-        st.caption(f"Chatting as {st.session_state.identity}")
+        st.caption(f"Working as · {st.session_state.identity}")
     st.divider()
     ok = (BRAIN_DIR / "00_overview.md").exists()
-    st.caption("Brain loaded" if ok else "Brain files missing")
+    st.caption("● SST connected" if ok else "○ SST files missing")
 
 # ---------- Chat ----------
-if nav == "Chat":
-    st.markdown('<h2 class="page-title">Chat</h2>', unsafe_allow_html=True)
-    st.caption("Talk to LU Brain: onboarding, tasks, deadlines, progress updates. "
-               "English or 中文都可以。")
+if nav == "LU Chat":
+    st.markdown('<div class="eyebrow">One conversation, shared context</div><h1 class="section-title">Talk it through with LU.</h1>', unsafe_allow_html=True)
+    st.caption("Share progress, ask for context, or work through onboarding. LU organizes updates into the shared brain; people keep the decisions.")
 
     client = get_client()
     if client is None:
@@ -580,13 +816,7 @@ if nav == "Chat":
         if prof and not st.session_state.get("profile_saved"):
             st.info("If this looks right, save it to the member profiles:")
             if st.button("Confirm and save profile", type="primary"):
-                p = BRAIN_DIR / "04_members.md"
-                cur = p.read_text(encoding="utf-8") if p.exists() else ""
-                lines = ["\n### " + prof.get("name", "New member")]
-                for k in ["interests", "availability", "resources", "current_task", "status"]:
-                    if prof.get(k):
-                        lines.append(f"- {k}: {prof[k]}")
-                p.write_text(cur.rstrip() + "\n" + "\n".join(lines) + "\n", encoding="utf-8")
+                save_member_profile(prof)
                 st.session_state.profile_saved = True
                 ok, msg = github_push_file("sst_brain/04_members.md")
                 if ok:
@@ -670,83 +900,332 @@ if nav == "Chat":
         send_and_reply(prompt)
         st.rerun()
 
-# ---------- Brain ----------
-elif nav == "Brain":
-    st.markdown('<h2 class="page-title">SST Brain</h2>', unsafe_allow_html=True)
-    st.caption("The team's shared knowledge base.")
-    brain = read_brain()
-    tabs = st.tabs(list(BRAIN_FILES.keys()))
-    for tab, name in zip(tabs, BRAIN_FILES.keys()):
-        with tab:
-            st.markdown(f'<div class="brain-card">{brain[name]}</div>', unsafe_allow_html=True)
-
-# ---------- Chase list ----------
-# Deterministic: built from 03 + 05 by code, not guessed by the LLM.
-# That was the bug — the old page asked the model to read the brain and
-# hope it noticed everything, so items went missing. Every section below
-# comes from a parse, with explicit rules ("快到了" = overdue or ≤ 7 days).
-else:
-    st.markdown('<h2 class="page-title">Chase List</h2>', unsafe_allow_html=True)
-    st.caption("For execs: built from the project file + tracking log, you only forward the lines. "
-               "No API key needed for this page.")
-    today = datetime.date.today()
+# ---------- Team overview ----------
+elif nav == "Team Overview":
     projects = parse_projects()
-    items, activation, other, activity = parse_tracking()
+    members = parse_members()
+    updates = parse_recent_updates()
+    deadline_items, activation_items, other_items, activity = parse_tracking()
+    blockers = [
+        project for project in projects
+        if project.get("blocker")
+        or re.search(r"blocked|阻塞|卡住", project.get("status", ""), re.I)
+    ]
 
-    st.markdown("### 所有项目当前状态")
-    if not projects:
-        st.info("项目文件里还没有项目。成员汇报进度后会自动出现在这里。")
-    for pr in projects:
-        st.markdown(f"- **{pr['name']}** — 状态：{pr['status'] or '未知'}；"
-                    f"上一步已完成：{pr['completed'] or '—'}；"
-                    f"下一步：{pr['next_step'] or '未填写'}；"
-                    f"下次截止：{pr['next_deadline'] or '暂无'}")
+    hero_asset = ASSETS / "kettle_hero.png"
+    hero_image = ""
+    if hero_asset.exists():
+        encoded = base64.b64encode(hero_asset.read_bytes()).decode("ascii")
+        hero_image = f'<img class="hero-kettle" src="data:image/png;base64,{encoded}" alt="LU kettle mascot">'
 
-    dated = [(it, _parse_date(it["deadline"])) for it in items]
-    dated = [(it, d) for it, d in dated if d]
-    overdue = sorted([(it, d) for it, d in dated if d < today], key=lambda x: x[1])
-    soon = sorted([(it, d) for it, d in dated
-                   if today <= d <= today + datetime.timedelta(days=7)], key=lambda x: x[1])
-    rest = sorted([(it, d) for it, d in dated
-                   if d > today + datetime.timedelta(days=7)], key=lambda x: x[1])
+    left, right = st.columns([1.2, .8], gap="large")
+    with left:
+        st.markdown(
+            '<div class="hero"><div class="eyebrow" style="color:#AEB9F2">Lady Up · team coordination</div>'
+            '<h1 class="serif">Work moves<br>better together.</h1>'
+            '<p>One place to see what the team is making, share what changed, and keep the context that helps everyone move.</p>'
+            '<div class="mono" style="font-size:.72rem;color:#AEB0BD;margin-top:1.6rem">PEOPLE → LU → SST BRAIN</div></div>',
+            unsafe_allow_html=True,
+        )
+    with right:
+        st.markdown(
+            f'<div class="hero hero-visual" style="padding:1.3rem;display:flex;align-items:center;justify-content:center">{hero_image}'
+            '<div class="mono" style="position:absolute;right:24px;bottom:20px;font-size:.62rem;color:#AEB0BD">LU · KEEPS THE THREAD</div></div>',
+            unsafe_allow_html=True,
+        )
 
-    st.markdown("### 待催：日期快到了（逾期 + 7 天内）")
-    if not overdue and not soon:
-        st.info("没有逾期或 7 天内到期的事项。")
-    for it, d in overdue + soon:
-        st.markdown(f"- {chase_reminder(it, today)}")
+    st.write("")
+    metric_cols = st.columns(4)
+    metrics = [
+        (len(projects), "Projects in SST"),
+        (len(members), "Member profiles"),
+        (len(deadline_items), "Open follow-ups"),
+        (len(updates), "Recent log entries"),
+    ]
+    for column, (value, label) in zip(metric_cols, metrics):
+        with column:
+            st.markdown(
+                f'<div class="surface"><div class="metric">{value:02d}</div>'
+                f'<div class="small-muted">{html.escape(label)}</div></div>',
+                unsafe_allow_html=True,
+            )
 
-    st.markdown("### 其他待催日期（按时间排序）")
-    if not rest:
-        st.info("没有其他未完成的日期事项。")
-    for it, d in rest:
-        st.markdown(f"- {chase_reminder(it, today)}")
+    overview_tab, followups_tab = st.tabs(["Team pulse", "Coordination follow-ups"])
+    with overview_tab:
+        st.write("")
+        project_col, team_col = st.columns([1.2, .8], gap="large")
+        with project_col:
+            st.markdown('<div class="section-title">In motion</div>', unsafe_allow_html=True)
+            if not projects:
+                st.info("No projects are listed in the SST yet.")
+            for project in projects[:4]:
+                status = project.get("status") or "Status not recorded"
+                tone = ("status-blocked" if re.search(r"blocked|阻塞|卡住", status, re.I)
+                        else "status-active" if re.search(r"active|持续|进行|排版中", status, re.I)
+                        else "status-progress")
+                st.markdown(
+                    f'<div class="surface" style="margin:.75rem 0">'
+                    f'<div class="eyebrow">PROJECT · SST</div>'
+                    f'<div class="project-title">{html.escape(project["name"])}</div>'
+                    f'<div style="margin:.45rem 0 .7rem"><span class="status {tone}">{html.escape(status)}</span></div>'
+                    f'<div class="small-muted">{html.escape(project.get("next_step") or project.get("schedule") or "Next step not recorded in SST.")}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            if len(projects) > 4:
+                st.caption(f"Showing 4 of {len(projects)} projects.")
+            st.button("See all projects →", on_click=navigate_to, args=("Projects",))
 
-    st.markdown("### 两周无动静")
-    names = get_member_names()
-    if not names:
-        st.info("成员档案里还没有成员。")
-    else:
-        silent = [n for n in names
-                  if n in activity and (today - activity[n]).days >= 14]
-        no_record = [n for n in names if n not in activity]
+        with team_col:
+            st.markdown('<div class="section-title">People & now</div>', unsafe_allow_html=True)
+            if not members:
+                st.info("Member profiles will appear here as people onboard.")
+            for member in members:
+                task = member.get("current_task") or "No current task recorded"
+                status = member.get("status") or "Status not recorded"
+                st.markdown(
+                    f'<div class="surface-lilac" style="margin:.75rem 0">'
+                    f'<div style="display:flex;justify-content:space-between;gap:1rem">'
+                    f'<strong>{html.escape(member["name"])}</strong>'
+                    f'<span class="mono" style="font-size:.66rem">{html.escape(status)}</span></div>'
+                    f'<div class="small-muted" style="margin-top:.55rem">{html.escape(task)}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown('<div class="surface" style="margin-top:1rem"><div class="eyebrow">THE WAY WE WORK</div>'
+                        '<div class="small-muted" style="margin-top:.5rem">Share what changed in LU Chat. LU records it; project owners and teammates make the calls.</div></div>',
+                        unsafe_allow_html=True)
+
+        st.write("")
+        updates_col, next_col = st.columns(2, gap="large")
+        with updates_col:
+            st.markdown('<div class="section-title">Latest tracking notes</div>', unsafe_allow_html=True)
+            if updates:
+                for update in updates[:3]:
+                    st.markdown(
+                        f'<div class="step-card"><div class="mono" style="font-size:.66rem;color:#777987">{html.escape(update["heading"])}</div>'
+                        f'<div style="margin-top:.35rem">{html.escape(update["text"])}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("No recent updates have been recorded.")
+        with next_col:
+            st.markdown('<div class="section-title">Next & blockers</div>', unsafe_allow_html=True)
+            next_steps = [p for p in projects if p.get("next_step") or p.get("next_deadline")]
+            if next_steps:
+                for project in next_steps[:3]:
+                    detail = project.get("next_step") or project.get("next_deadline")
+                    st.markdown(f"- **{html.escape(project['name'])}** — {html.escape(detail)}")
+            else:
+                st.caption("No next steps are currently recorded.")
+            if deadline_items:
+                st.markdown("**Tracked dates**")
+                for item in deadline_items[:3]:
+                    date = _parse_date(item["deadline"])
+                    marker = "Past due" if date and date < datetime.date.today() else "Due"
+                    project_label = f" · {item['project']}" if item.get("project") else ""
+                    st.markdown(
+                        f"- **{marker} · {item['deadline']}** — "
+                        f"{html.escape(item['step'] + project_label)}"
+                    )
+            if blockers:
+                for project in blockers:
+                    st.warning(f"{project['name']}: {project.get('blocker') or project.get('status')}")
+            else:
+                st.caption("No blockers are reported in the SST.")
+
+        st.write("")
+        story_img, story_copy = st.columns([.28, .72], gap="large")
+        with story_img:
+            supporting_kettle = ASSETS / "kettle_cloth.jpg"
+            if supporting_kettle.exists():
+                st.image(str(supporting_kettle), width=190)
+        with story_copy:
+            st.markdown('<div class="surface-lilac"><span class="eyebrow">HOW WE STAY ALIGNED</span>'
+                        '<div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:.7rem">'
+                        '<span><b>01 · People update</b><br><span class="small-muted">Progress, context, capacity</span></span>'
+                        '<span class="mono" style="color:#6479D6">→</span>'
+                        '<span><b>02 · LU coordinates</b><br><span class="small-muted">Organizes, clarifies, reminds</span></span>'
+                        '<span class="mono" style="color:#6479D6">→</span>'
+                        '<span><b>03 · SST remembers</b><br><span class="small-muted">One shared team picture</span></span>'
+                        '</div></div>', unsafe_allow_html=True)
+
+        cta, cta2 = st.columns([1, 3])
+        with cta:
+            st.button("Share an update with LU", type="primary",
+                      on_click=navigate_to, args=("LU Chat",))
+        with cta2:
+            st.button("New member? Start onboarding", on_click=navigate_to,
+                      args=("LU Chat", "I'm new here"))
+
+    with followups_tab:
+        st.markdown('<div class="section-title">Coordination follow-ups</div>', unsafe_allow_html=True)
+        st.caption("Built deterministically from the project file and tracking log. Follow-ups are prompts for the team, not automatic decisions.")
+        today = datetime.date.today()
+        dated = [(item, _parse_date(item["deadline"])) for item in deadline_items]
+        dated = [(item, date) for item, date in dated if date]
+        overdue = sorted([(item, date) for item, date in dated if date < today], key=lambda item: item[1])
+        soon = sorted([(item, date) for item, date in dated if today <= date <= today + datetime.timedelta(days=7)], key=lambda item: item[1])
+        later = sorted([(item, date) for item, date in dated if date > today + datetime.timedelta(days=7)], key=lambda item: item[1])
+        st.markdown("#### Needs a check-in · overdue or due within 7 days")
+        if not overdue and not soon:
+            st.info("No overdue or near-term dates in the tracking log.")
+        for item, _ in overdue + soon:
+            st.markdown(f"- {chase_reminder(item, today)}")
+        st.markdown("#### Later dates")
+        if not later:
+            st.caption("No later dated items.")
+        for item, _ in later:
+            st.markdown(f"- {chase_reminder(item, today)}")
+
+        st.markdown("#### Member check-ins")
+        silent = [name for name in names if name in activity and (today - activity[name]).days >= 14]
+        no_record = [name for name in names if name not in activity]
         if not silent and not no_record:
-            st.info("没有静默成员。")
-        for n in silent:
-            st.markdown(f"- {n}（上次活跃 {activity[n].isoformat()}，"
-                        f"{(today - activity[n]).days} 天前）：问问现在能做什么。")
-        for n in no_record:
-            st.markdown(f"- {n}（追踪日志里还没有任何记录）。")
+            st.caption("No members currently meet the 14-day check-in rule.")
+        for name in silent:
+            st.markdown(f"- {name} · last tracking entry {activity[name].isoformat()} ({(today - activity[name]).days} days ago).")
+        for name in no_record:
+            st.markdown(f"- {name} · no tracking entry recorded.")
+        st.markdown("#### Waiting for activation")
+        if not activation_items:
+            st.caption("No activation items in the tracking log.")
+        for item in activation_items:
+            st.markdown(f"- {item['line']}")
+        st.markdown("#### Other follow-ups")
+        if not other_items:
+            st.caption("No other follow-ups in the tracking log.")
+        for item in other_items:
+            st.markdown(f"- {item['member'] + ': ' if item['member'] else ''}{item['line']}")
 
-    st.markdown("### 待激活")
-    if not activation:
-        st.info("没有等着进群的成员。")
-    for act in activation:
-        st.markdown(f"- {act['line']}")
+# ---------- Projects ----------
+elif nav == "Projects":
+    projects = parse_projects()
+    project_updates = parse_recent_updates(limit=20)
+    st.markdown('<div class="eyebrow">Shared work, clearly held</div><h1 class="section-title">Projects</h1>', unsafe_allow_html=True)
+    st.caption("A simple view of current work, sourced from SST. Update progress by telling LU in chat; project owners keep decision-making.")
+    if not projects:
+        st.info("No projects are listed in the SST yet.")
+    for start in range(0, len(projects), 2):
+        columns = st.columns(2, gap="large")
+        for column, project in zip(columns, projects[start:start + 2]):
+            with column:
+                status = project.get("status") or "Status not recorded"
+                tone = ("status-blocked" if re.search(r"blocked|阻塞|卡住", status, re.I)
+                        else "status-active" if re.search(r"active|持续|进行|排版中", status, re.I)
+                        else "status-progress")
+                team = project.get("team") or "Contributors not specified in SST"
+                schedule = project.get("schedule") or project.get("next_deadline") or "No schedule recorded"
+                step = project.get("next_step") or "Next step not recorded"
+                blocker = project.get("blocker") or ("Reported in status" if re.search(r"blocked|阻塞|卡住", status, re.I) else "No blocker recorded")
+                project_key = _norm_name(project["name"])
+                latest = next((
+                    update for update in project_updates
+                    if project_key and (
+                        project_key in _norm_name(update["text"])
+                        or _norm_name(update["text"]) in project_key
+                    )
+                ), None)
+                latest_text = (f"{latest['heading']} · {latest['text']}"
+                               if latest else "No project-specific update recorded")
+                st.markdown(
+                    f'<div class="surface" style="min-height:255px;margin:.45rem 0">'
+                    f'<div class="eyebrow">TEAM PROJECT</div>'
+                    f'<div class="project-title" style="font-size:1.6rem;margin:.5rem 0">{html.escape(project["name"])}</div>'
+                    f'<span class="status {tone}">{html.escape(status)}</span>'
+                    f'<div class="small-muted" style="margin-top:1rem"><b>Description</b> · Not recorded in SST</div>'
+                    f'<div class="small-muted" style="margin-top:.5rem"><b>Owner</b> · Not specified in SST</div>'
+                    f'<div class="small-muted" style="margin-top:1rem"><b>Contributors</b> · {html.escape(team)}</div>'
+                    f'<div class="small-muted" style="margin-top:.5rem"><b>Schedule</b> · {html.escape(schedule)}</div>'
+                    f'<div class="small-muted" style="margin-top:.5rem"><b>Next</b> · {html.escape(step)}</div>'
+                    f'<div class="small-muted" style="margin-top:.5rem"><b>Blocker</b> · {html.escape(blocker)}</div>'
+                    f'<div class="small-muted" style="margin-top:.5rem"><b>Latest update</b> · {html.escape(latest_text)}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+    if projects:
+        st.info("The SST currently stores project descriptions mainly as status, team, and schedule notes. No progress percentages or unrecorded owners are inferred.")
+    st.button("Update a project in LU Chat", type="primary",
+              on_click=navigate_to, args=("LU Chat",))
 
-    st.markdown("### 其他待跟进（非日期事项）")
-    if not other:
-        st.info("没有其他待跟进事项。")
-    for o in other:
-        who = f"{o['member']}：" if o["member"] else ""
-        st.markdown(f"- {who}{o['line']}")
+# ---------- SST Brain ----------
+else:
+    st.markdown('<div class="eyebrow">Single Source of Truth</div><h1 class="section-title">SST Brain</h1>', unsafe_allow_html=True)
+    st.caption("The team's shared memory: updates, project context, protocols, profiles, and tracking.")
+    working_tab, snapshot_tab = st.tabs(["Working Brain", "Team Snapshot"])
+    brain = read_brain()
+    with working_tab:
+        query = st.text_input("Search the shared brain", placeholder="Search projects, people, decisions, protocols…")
+        selected = [name for name in BRAIN_FILES if not query or query.casefold() in brain[name].casefold()]
+        if query and not selected:
+            st.info("No matching SST documents.")
+        for name in selected:
+            contents = brain[name]
+            with st.expander(name, expanded=bool(query)):
+                st.markdown(contents)
+        st.caption("Source documents remain the editable SST files; this view doesn't create a second copy.")
+
+    with snapshot_tab:
+        projects = parse_projects()
+        members = parse_members()
+        updates = parse_recent_updates(limit=6)
+        deadline_items, _, _, _ = parse_tracking()
+        blockers = [
+            f"{project['name']} — {project.get('blocker') or project.get('status')}"
+            for project in projects
+            if project.get("blocker") or re.search(r"blocked|阻塞|卡住", project.get("status", ""), re.I)
+        ]
+        st.markdown('<div class="poster"><div class="eyebrow" style="color:#AEB9F2">LADY UP · TEAM REPORT</div>'
+                    '<h2>One team, in motion.</h2><div class="mono" style="font-size:.72rem;color:#BFC0CA">'
+                    f'{datetime.date.today().isoformat()} · GENERATED FROM SST BRAIN</div></div>',
+                    unsafe_allow_html=True)
+        pcol, mcol = st.columns(2, gap="large")
+        with pcol:
+            st.markdown("### Current priorities")
+            if projects:
+                for project in projects:
+                    detail = project.get("next_step") or project.get("status") or "No update recorded"
+                    st.markdown(f"- **{project['name']}** · {detail}")
+            else:
+                st.caption("No project priorities recorded.")
+        with mcol:
+            st.markdown("### Responsibilities")
+            if members:
+                for member in members:
+                    role_or_task = member.get("current_task") or member.get("role") or "No responsibility recorded"
+                    st.markdown(f"- **{member['name']}** · {role_or_task}")
+            else:
+                st.caption("No member profiles recorded.")
+        accomplishments, blockers_col = st.columns(2, gap="large")
+        with accomplishments:
+            st.markdown("### Recent team updates")
+            st.caption("Entries are shown as recorded; completion is not inferred.")
+            if updates:
+                for update in updates:
+                    st.markdown(f"- {update['heading']} · {update['text']}")
+            else:
+                st.caption("No recent entries in the tracking log.")
+        with blockers_col:
+            st.markdown("### Blockers & next steps")
+            if blockers:
+                for blocker in blockers:
+                    st.markdown(f"- {blocker}")
+            else:
+                st.caption("No blockers are reported in the SST.")
+            if deadline_items:
+                st.markdown("**Tracked next steps**")
+                for item in deadline_items[:5]:
+                    project_label = f" · {item['project']}" if item.get("project") else ""
+                    st.markdown(f"- {item['deadline']} · {item['step']}{project_label}")
+            else:
+                st.caption("No dated next steps are in the tracking log.")
+        st.divider()
+        st.caption("Share this report by downloading the poster. Public or permission-controlled links aren't configured in the current app.")
+        pdf_data = make_snapshot_pdf(projects, members, updates, deadline_items, blockers)
+        st.download_button(
+            "Download Team Snapshot · PDF",
+            data=pdf_data,
+            file_name=f"lu-team-snapshot-{datetime.date.today().isoformat()}.pdf",
+            mime="application/pdf",
+            type="primary",
+        )

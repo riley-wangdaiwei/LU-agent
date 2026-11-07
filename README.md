@@ -8,16 +8,22 @@ Live demo runs on Streamlit Community Cloud (free tier).
 
 ## What it does
 
+- **Team Overview** — a shared view of the projects, member updates, and
+  follow-ups already recorded in the SST Brain.
 - **Chat** — talk to the team brain. Starter questions are shown up front
   ("Who am I on the team?", "What projects can I join?", "What are the
   deadlines for my project?", "What are my next 3 steps?").
 - **Onboarding** — new members tap "I am new here" and the agent walks them
   through 6 quick questions, one at a time (under 3 minutes). The profile is
-  saved to the member list after confirmation.
+  saved to the member list after confirmation. Existing members can ask LU to
+  update their profile.
+- **Projects** — a readable view of active project status and the next steps
+  recorded in the SST. Report changes through LU Chat.
 - **Schedule breakdown** — give it a project deadline and it works backwards
   through the team workflow (e.g. the 5-week interview cycle) to produce the
   next 3 concrete steps with suggested dates.
-- **Brain** — browse the shared knowledge base (SST Brain).
+- **SST Brain** — search the shared knowledge base and preview/download a
+  poster-like Team Snapshot PDF built from its current data.
 - **Chase List** — one click generates the weekly list, led by confirmed
   deadlines (big and small — the exec chases every one) and silent members to
   re-engage, plus members awaiting activation and items needing a decision.
@@ -88,7 +94,7 @@ brain is what the app reads from then on.
 
 ## Project structure
 
-- `app.py` — the Streamlit app (Chat / Brain / Chase List)
+- `app.py` — the Streamlit app (Team Overview / LU Chat / Projects / SST Brain)
 - `requirements.txt` — Python dependencies
 - `.env.example` — copy to `.env`, add your key (never commit `.env`)
 - `sst_brain/` — the shared knowledge base (6 Markdown files)
