@@ -26,3 +26,8 @@
 
 ## 2026-10-01 — Amelia confirmed deadlines
 - [ ] 2026-10-01 — Amelia 提交耐力科普文稿件 (project: 科普文耐力)
+
+## 2026-11-07 — Riley project update
+- [x] 网站申请季 profiles 更新 (project: 网站更新 申请季profiles)
+- [ ] 新网站重新设计（Vercel、注重视觉与互动） (project: 网站更新 申请季profiles)
+- note: 申请季 profile 部分已全部完成
