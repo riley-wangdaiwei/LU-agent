@@ -164,7 +164,11 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
   text-shadow:0 2px 18px rgba(0,0,0,.9); }}
 .flow-headline em {{ font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:-.035em; }}
 .flow-copy {{ font-size:15px;line-height:1.75;color:#c0c2cc;max-width:510px;
-  font-family:'Manrope',Arial,sans-serif;text-shadow:0 2px 18px rgba(0,0,0,.95); }}
+  font-family:'Manrope',Arial,sans-serif;text-shadow:0 2px 18px rgba(0,0,0,.95);
+  background:linear-gradient(145deg,rgba(30,34,48,.72),rgba(12,14,21,.78));
+  border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 18px;
+  box-shadow:0 24px 90px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px); }}
 .flow-label {{ font:10px 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;
   color:#929a95;text-shadow:0 2px 12px rgba(0,0,0,.9); }}
 .flow-glass {{ background:linear-gradient(145deg,rgba(30,34,48,.72),rgba(12,14,21,.78));
@@ -211,16 +215,37 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
 .stTextInput input::placeholder,.stTextArea textarea::placeholder {{ color:#858c87 !important; }}
 .stTextArea textarea {{ line-height:1.6; }}
 .stButton > button,.stFormSubmitButton > button,.stDownloadButton > button {{
-  border:0;border-radius:0;background:transparent;color:var(--green-light);
+  border:1px solid rgba(255,255,255,.16);border-radius:14px;
+  background:linear-gradient(145deg,rgba(38,44,62,.88),rgba(16,19,28,.92));
+  backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);
+  box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);
+  color:var(--green-light);
   font:500 11px 'DM Mono',monospace;letter-spacing:.1em;
-  padding:.78rem 0;transition:all .22s ease;box-shadow:none; }}
+  padding:.85rem 1.4rem;transition:all .22s ease; }}
 .stButton > button:hover,.stFormSubmitButton > button:hover,.stDownloadButton > button:hover {{
-  background:transparent;color:#fff;box-shadow:none;transform:translateX(5px); }}
+  background:linear-gradient(145deg,rgba(48,55,76,.92),rgba(22,26,38,.95));
+  color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.16);
+  transform:translateX(5px); }}
+/* Rithub arrow (Feather "arrow-up-right": diagonal shaft + right-angle
+   corner) after every button label. Inlined as a mask so it takes the
+   button text colour, including the white hover state. */
+.stButton > button::after,.stFormSubmitButton > button::after,
+.stDownloadButton > button::after,.flow-action-link::after {{
+  content:"";display:inline-block;width:1em;height:1em;margin-left:.45em;
+  vertical-align:-.12em;background-color:currentColor;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cline%20x1='7'%20y1='17'%20x2='17'%20y2='7'/%3E%3Cpolyline%20points='7%207%2017%207%2017%2017'/%3E%3C/svg%3E");
+  -webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center;
+  mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cline%20x1='7'%20y1='17'%20x2='17'%20y2='7'/%3E%3Cpolyline%20points='7%207%2017%207%2017%2017'/%3E%3C/svg%3E");
+  mask-size:contain;mask-repeat:no-repeat;mask-position:center; }}
 .flow-action-link {{ display:inline-flex;align-items:center;margin-top:24px;
-  padding:10px 0;border:0;border-radius:0;background:transparent;color:var(--green-light) !important;
+  padding:.85rem 1.4rem;border:1px solid rgba(255,255,255,.16);border-radius:14px;
+  background:linear-gradient(145deg,rgba(38,44,62,.88),rgba(16,19,28,.92));
+  backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);
+  box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);
+  color:var(--green-light) !important;
   text-decoration:none !important;font:500 11px 'DM Mono',monospace;letter-spacing:.1em;
   transition:all .22s ease; }}
-.flow-action-link:hover {{ transform:translateX(5px);color:#fff !important; }}
+.flow-action-link:hover {{ background:linear-gradient(145deg,rgba(48,55,76,.92),rgba(22,26,38,.95));transform:translateX(5px);color:#fff !important; }}
 .stChatMessage {{ background:transparent;border:0;border-radius:0; }}
 .stAlert {{ background:rgba(22,25,28,.46);color:var(--text);border:0;border-radius:0; }}
 .stExpander details,.stExpander summary {{
@@ -353,7 +378,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
         )
         st.selectbox("I'm here as", identity_options, key="identity",
                      help="Identity comes from member profiles in the SST. No login or permission system is configured.")
-        st.markdown('<a href="#talk" class="flow-action-link">GET STARTED ↓</a>',
+        st.markdown('<a href="#talk" class="flow-action-link">GET STARTED</a>',
                     unsafe_allow_html=True)
 
     st.markdown('<div id="talk"></div>', unsafe_allow_html=True)
@@ -474,7 +499,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
             st.caption("As LU gets to know you, your introduction, skills, and first interests will appear here.")
         else:
             st.caption("Share an update with LU to see your progress, completed work, blockers, and next steps organized here.")
-        st.markdown('<a href="#action" class="flow-action-link">REVIEW PRESENTATION ↓</a>',
+        st.markdown('<a href="#action" class="flow-action-link">REVIEW PRESENTATION</a>',
                     unsafe_allow_html=True)
 
     st.markdown('<div id="action"></div>', unsafe_allow_html=True)
@@ -547,7 +572,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
                 st.rerun()
         elif is_executive:
             st.caption("Executive-only approval is not available until the application has an authenticated role/permission system.")
-            st.markdown('<a href="#remember" class="flow-action-link">GENERATE WEEKLY REPORT ↓</a>',
+            st.markdown('<a href="#remember" class="flow-action-link">GENERATE WEEKLY REPORT</a>',
                         unsafe_allow_html=True)
         elif is_new and st.session_state.profile_saved:
             st.success("Profile confirmed. LU added the member introduction to the SST.")
