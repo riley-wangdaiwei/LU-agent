@@ -100,6 +100,66 @@ def _poster_png(projects: list, members: list, updates: list,
     return output.getvalue()
 
 
+def _render_next_steps(pending, identity, base, github_push_file, apply_progress_update, reply_hash):
+    """Two AI-assigned steps with 3/7/14-day deadline choices + confirm.
+
+    Step 1 becomes the project's next step + deadline in 03; both steps
+    become unchecked chase items in 05. Nothing writes before confirm.
+    """
+    items = [it for it in (pending.get("items") or []) if (it or {}).get("step")][:2]
+    if not items:
+        return
+    member = pending.get("member") or identity
+    project = pending.get("project") or ""
+    today = datetime.date.today()
+    if st.session_state.get("confirmed_nextsteps_key") == reply_hash:
+        st.success("Assigned steps confirmed and on the chase list.")
+        return
+    st.markdown('<div class="flow-label">SUGGESTED NEXT STEPS · FROM YOUR UPDATE</div>',
+                unsafe_allow_html=True)
+    windows = [("3 days", today + datetime.timedelta(days=3)),
+               ("7 days", today + datetime.timedelta(days=7)),
+               ("14 days", today + datetime.timedelta(days=14))]
+    for i, item in enumerate(items):
+        st.markdown(f"**Step {i + 1}** · {html.escape(item.get('step', ''))}")
+        if item.get("why"):
+            st.caption(item["why"])
+        suggested = {"3d": 0, "7d": 1, "14d": 2}.get(item.get("suggested"), 1)
+        options = [f"{label} · {d.isoformat()}" for label, d in windows]
+        st.radio(f"Deadline for step {i + 1}", options, index=suggested,
+                 key=f"ns_deadline_{i}", label_visibility="collapsed")
+    if st.button("CONFIRM ASSIGNED STEPS", key="confirm_nextsteps", type="primary"):
+        dates = []
+        for i, item in enumerate(items):
+            label = st.session_state.get(f"ns_deadline_{i}", "")
+            m = re.search(r"(\d{4}-\d{2}-\d{2})", label or "")
+            dates.append(m.group(1) if m else (today + datetime.timedelta(days=7)).isoformat())
+        synced = True
+        if project:
+            result = apply_progress_update({"member": member, "project": project,
+                                            "next_step": items[0].get("step"),
+                                            "next_deadline": dates[0]})
+            synced = bool(result.get("pushed"))
+        tpath = base / "sst_brain" / "05_tracking.md"
+        tcur = tpath.read_text(encoding="utf-8") if tpath.exists() else "# 追踪日志\n"
+        start = 1 if project else 0
+        lines = []
+        for i in range(start, len(items)):
+            line = f"- [ ] {dates[i]} — {items[i].get('step')}" + (f" (project: {project})" if project else "")
+            if line not in tcur:
+                lines.append(line)
+        if lines:
+            block = f"\n## {today.isoformat()} — {member} confirmed next steps\n" + "\n".join(lines) + "\n"
+            tpath.write_text(tcur.rstrip() + "\n" + block, encoding="utf-8")
+            ok, _ = github_push_file("sst_brain/05_tracking.md")
+            synced = synced and ok
+        st.session_state.confirmed_nextsteps_key = reply_hash
+        st.success("Assigned steps confirmed and on the chase list.")
+        if not synced:
+            st.caption("Saved locally. GitHub sync skipped — the brain file is updated on the next sync.")
+        st.rerun()
+
+
 def render_hub(*, base: Path, get_client, chat_once,
                identity_note, get_member_names, get_member_block, read_brain,
                parse_projects, parse_members, parse_tracking,
@@ -177,22 +237,21 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
   backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);position:relative; }}
 .flow-glass:after {{ content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   background:linear-gradient(120deg,rgba(255,255,255,.045),transparent 35%); }}
-.st-key-flow-who,.st-key-flow-talk,.st-key-flow-present,
-.st-key-flow-act,.st-key-flow-remember {{ min-height:82vh;padding:8vh 0 6vh;
+.st-key-flow-who,.st-key-flow-talk,.st-key-flow-review {{ min-height:82vh;padding:8vh 0 6vh;
   scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;
   max-width:430px;width:42vw; }}
 .st-key-flow-who {{ padding-top:14vh; }}
-.st-key-flow-who,.st-key-flow-present,.st-key-flow-remember {{ margin-left:1%; }}
-.st-key-flow-talk,.st-key-flow-act {{ margin-left:auto;margin-right:1%; }}
-.st-key-flow-who,.st-key-flow-talk,.st-key-flow-present,.st-key-flow-act,.st-key-flow-remember {{
+.st-key-flow-who,.st-key-flow-review {{ margin-left:1%; }}
+.st-key-flow-talk {{ margin-left:auto;margin-right:1%; }}
+.st-key-flow-who,.st-key-flow-talk,.st-key-flow-review {{
   background:linear-gradient(90deg,rgba(5,6,9,.42) 0%,rgba(5,6,9,.2) 54%,transparent 100%);
   border:0;border-radius:0;padding:clamp(22px,3vw,34px);box-shadow:none;
   backdrop-filter:none;-webkit-backdrop-filter:none;position:relative;
 }}
-.st-key-flow-talk,.st-key-flow-act {{
+.st-key-flow-talk {{
   background:linear-gradient(270deg,rgba(5,6,9,.42) 0%,rgba(5,6,9,.2) 54%,transparent 100%);
 }}
-.st-key-flow-remember {{ max-width:520px;width:44%; }}
+.st-key-flow-remember {{ max-width:none;width:100%;margin-left:0;margin-right:0; }}
 .stTextInput label,.stSelectbox label,.stTextArea label {{ color:#c8ceca !important;font-family:'Manrope',Arial,sans-serif !important; }}
 .stTextInput input,.stTextArea textarea,[data-baseweb="select"] > div {{
   background:transparent !important;color:#f6f6fa !important;
@@ -270,12 +329,15 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
   background:none; }}
 .snapshot-title {{ font:300 clamp(2rem,4vw,3.8rem)/1 'Manrope',Arial,sans-serif !important;
   color:#f3f4fa !important;margin:20px 0 14px !important; }}
+.snap-card {{ background:linear-gradient(135deg,rgba(30,34,48,.72),rgba(12,14,21,.78));backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:18px 20px;margin-bottom:14px;box-shadow:0 18px 44px rgba(0,0,0,.34); }}
+.snap-card .flow-label {{ margin-top:0; }}
+.stat-num {{ font-family:'Neue Montreal',system-ui,sans-serif;font-size:44px;font-weight:300;line-height:1;color:#F4F4F7; }}
 @supports (animation-timeline:view()) {{
-  .st-key-flow-who,.st-key-flow-talk,.st-key-flow-present,
-  .st-key-flow-act,.st-key-flow-remember {{
+  .st-key-flow-who,.st-key-flow-talk,.st-key-flow-review,
+  .st-key-flow-remember {{
     animation:panel-through linear both;animation-timeline:view();
     animation-range:entry 0% exit 100%; }}
-  .st-key-flow-talk,.st-key-flow-act {{ animation-name:panel-through-right; }}
+  .st-key-flow-talk {{ animation-name:panel-through-right; }}
 }}
 @keyframes panel-through {{
   0% {{ opacity:.15;transform:translate3d(-12vw,36px,0) scale(.97); }}
@@ -290,11 +352,11 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
 @media(max-width:720px) {{
   .block-container {{ padding:3rem 1rem 8vh; }}
   .floating-kettle {{ width:100vw;height:100vw;top:44%;opacity:.38; }}
-  .st-key-flow-who,.st-key-flow-talk,.st-key-flow-present,.st-key-flow-act,.st-key-flow-remember {{
+  .st-key-flow-who,.st-key-flow-talk,.st-key-flow-review,.st-key-flow-remember {{
     min-height:88vh;padding:7vh 24px;margin-left:0;margin-right:0;width:100%;max-width:none; }}
-  .st-key-flow-who,.st-key-flow-present,.st-key-flow-remember {{
+  .st-key-flow-who,.st-key-flow-review {{
     transform:translateX(-1.5vw); }}
-  .st-key-flow-talk,.st-key-flow-act {{ transform:translateX(1.5vw); }}
+  .st-key-flow-talk {{ transform:translateX(1.5vw); }}
 }}
 @media(prefers-reduced-motion:reduce) {{
   [data-testid="stMain"] {{ scroll-behavior:auto; }}
@@ -303,7 +365,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
 }}
 </style>
 <div class="flow-topline"><div class="flow-brand">LU <span>/ TEAM CONVERSATION</span></div>
-<div class="flow-count">TALK → PRESENT → ACT → REMEMBER</div></div>
+<div class="flow-count">TALK → REVIEW → REMEMBER</div></div>
 {kettle_tag}
 """, unsafe_allow_html=True)
 
@@ -320,6 +382,8 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
     st.session_state.setdefault("progress_applied", set())
     st.session_state.setdefault("deadlines_saved", False)
     st.session_state.setdefault("activation_saved", False)
+    st.session_state.setdefault("confirmed_nextsteps_key", "")
+    st.session_state.setdefault("brain_doc", "")
 
     identity = st.session_state.identity
     is_new = identity == "I'm new here"
@@ -366,6 +430,8 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
     pending_progress = _extract(latest_reply, "progress")
     pending_deadlines = _extract(latest_reply, "deadlines")
     pending_activation = _extract(latest_reply, "activation")
+    pending_nextsteps = _extract(latest_reply, "nextsteps")
+    reply_hash = hashlib.sha256(latest_reply.encode("utf-8")).hexdigest() if latest_reply else ""
     safe_profile = pending_profile or {}
     safe_progress = pending_progress or {}
 
@@ -425,10 +491,11 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
             unsafe_allow_html=True,
         )
 
-    with st.container(key="flow-present", border=False):
+    with st.container(key="flow-review", border=False):
         st.markdown(
-            f'<div class="flow-kicker">03 / PRESENTATION · FOR THE {identity_kind.upper()}</div>'
-            '<h2 class="flow-headline">Here’s what<br><em>LU understood.</em></h2>',
+            f'<div class="flow-kicker">03 / REVIEW & CONFIRM · FOR THE {identity_kind.upper()}</div>'
+            '<h2 class="flow-headline">Here’s what<br><em>LU understood.</em></h2>'
+            '<div class="flow-copy">Review what LU understood, pick your next steps, then confirm what goes into the shared brain.</div>',
             unsafe_allow_html=True,
         )
         if is_executive:
@@ -498,15 +565,13 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
         elif is_new:
             st.caption("As LU gets to know you, your introduction, skills, and first interests will appear here.")
         else:
-            st.caption("Share an update with LU to see your progress, completed work, blockers, and next steps organized here.")
-        st.markdown('<a href="#action" class="flow-action-link">REVIEW PRESENTATION</a>',
-                    unsafe_allow_html=True)
-
-    st.markdown('<div id="action"></div>', unsafe_allow_html=True)
-    with st.container(key="flow-act", border=False):
+            st.markdown('<div class="flow-copy">Share an update with LU to see your progress, completed work, blockers, and next steps organized here.</div>',
+                        unsafe_allow_html=True)
+        if pending_nextsteps:
+            _render_next_steps(pending_nextsteps, identity, base, github_push_file,
+                               apply_progress_update, reply_hash)
         st.markdown(
-            '<div class="flow-kicker">04 / ACTION</div>'
-            '<h2 class="flow-headline">Keep what’s<br><em>yours. Confirm.</em></h2>'
+            '<div class="flow-label" style="margin-top:28px">CONFIRM · PEOPLE DECIDE</div>'
             '<div class="flow-copy">You and the project owners make decisions. LU only records information after the right person confirms it.</div>',
             unsafe_allow_html=True,
         )
@@ -591,7 +656,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
 
     with st.container(key="flow-remember", border=False):
         st.markdown(
-            '<div id="remember"></div><div class="flow-kicker">05 / REMEMBER · SST BRAIN</div>'
+            '<div id="remember"></div><div class="flow-kicker">04 / REMEMBER · SST BRAIN</div>'
             '<h2 class="flow-headline">One shared<br><em>memory.</em></h2>'
             '<div class="flow-copy">Confirmed conversations, project context, protocols, and responsibilities stay together in the team’s Single Source of Truth.</div>',
             unsafe_allow_html=True,
@@ -600,12 +665,31 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
         docs = list(brain)
         query = st.text_input("Search the SST Brain", placeholder="Search projects, people, protocols…")
         if query:
-            docs = [name for name in docs if query.casefold() in brain[name].casefold()]
-            if not docs:
-                st.caption("No matching SST documents.")
-        selected_doc = st.selectbox("Open a brain document", docs, label_visibility="collapsed") if docs else None
-        if selected_doc:
-            with st.expander(f"VIEW · {selected_doc.upper()}", expanded=bool(query)):
+            matches = []
+            for name in docs:
+                for line in brain[name].splitlines():
+                    if query.casefold() in line.casefold() and line.strip():
+                        matches.append((name, line.strip()))
+            if not matches:
+                st.caption("No matching lines in the SST Brain.")
+            for name, line in matches[:8]:
+                st.markdown(f"**{name}** · {html.escape(line)}")
+            if len(matches) > 8:
+                st.caption(f"+ {len(matches) - 8} more matching lines.")
+        else:
+            st.markdown('<div class="flow-label">OPEN A BRAIN DOCUMENT</div>',
+                        unsafe_allow_html=True)
+            doc_cards = st.columns(3)
+            for i, name in enumerate(docs):
+                first = next((ln.strip().lstrip("> #") for ln in brain[name].splitlines()
+                              if ln.strip() and not ln.strip().startswith("```")), "")
+                with doc_cards[i % 3]:
+                    if st.button(name.upper(), key=f"brain_doc_{i}"):
+                        st.session_state.brain_doc = name
+                    if first:
+                        st.caption(first[:60] + ("…" if len(first) > 60 else ""))
+            selected_doc = st.session_state.get("brain_doc") or docs[0]
+            if selected_doc in brain:
                 st.markdown(brain[selected_doc])
 
         st.markdown('<div class="flow-rule"></div><div class="flow-label">'
@@ -628,30 +712,38 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
             f'{len(projects):02d} PROJECTS · {len(members):02d} MEMBERS</div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown(f"**{len(projects)} projects** · **{len(members)} member profiles** · "
-                    f"**{len(deadlines)} tracked next steps**")
-        preview_cols = st.columns(2)
-        with preview_cols[0]:
-            st.markdown("**Project progress**")
-            for project in projects[:5]:
-                st.markdown(f"- {project['name']} · {project.get('status') or 'No status recorded'}")
-            st.markdown("**Recent team updates**")
-            for update in updates[:3]:
-                st.markdown(f"- {update['heading']} · {update['text']}")
-        with preview_cols[1]:
-            st.markdown("**Responsibilities**")
-            for member in members[:5]:
-                st.markdown(f"- {member['name']} · {member.get('current_task') or 'Not recorded'}")
-            st.markdown("**Blockers & next steps**")
-            for project in projects:
-                if project.get("next_step"):
-                    st.markdown(f"- {project['name']} · {project['next_step']}")
-            for item in deadlines[:5]:
-                st.markdown(f"- {item['deadline']} · {item['step']}")
-            for blocker in blockers:
-                st.markdown(f"- Blocker · {blocker}")
-            if not blockers and not deadlines and not any(project.get("next_step") for project in projects):
-                st.caption("No blockers or next steps are currently recorded.")
+        stat_cols = st.columns(3)
+        for col, value, label in [
+            (stat_cols[0], f"{len(projects):02d}", "PROJECTS"),
+            (stat_cols[1], f"{len(members):02d}", "MEMBERS"),
+            (stat_cols[2], f"{len(deadlines):02d}", "TRACKED NEXT STEPS"),
+        ]:
+            with col:
+                st.markdown(f'<div class="stat-num">{value}</div>'
+                            f'<div class="flow-label">{label}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="flow-rule"></div>', unsafe_allow_html=True)
+
+        def _snap_card(title, lines, empty="Nothing recorded."):
+            body = "".join(f"<div>{html.escape(line)}</div>" for line in lines) or f"<div>{empty}</div>"
+            st.markdown(f'<div class="snap-card"><div class="flow-label">{title}</div>{body}</div>',
+                        unsafe_allow_html=True)
+
+        snap_cols = st.columns(2)
+        with snap_cols[0]:
+            _snap_card("PROJECT PULSE",
+                       [f"{p['name']} · {p.get('status') or 'No status recorded'}" for p in projects[:4]]
+                       + ([f"+ {len(projects) - 4} more projects"] if len(projects) > 4 else []))
+            _snap_card("RECENT UPDATES",
+                       [f"{u['heading']} · {u['text']}" for u in updates[:4]])
+        with snap_cols[1]:
+            _snap_card("PEOPLE & RESPONSIBILITIES",
+                       [f"{m['name']} · {m.get('current_task') or 'Not recorded'}" for m in members[:4]]
+                       + ([f"+ {len(members) - 4} more members"] if len(members) > 4 else []))
+            next_lines = [f"{p['name']} · {p['next_step']}" for p in projects if p.get("next_step")][:3]
+            next_lines += [f"{it['deadline']} · {it['step']}" for it in deadlines[:3]]
+            next_lines += [f"Blocker · {b}" for b in blockers[:2]]
+            _snap_card("NEXT STEPS & BLOCKERS", next_lines,
+                       empty="No blockers or next steps are currently recorded.")
         pdf_data = make_snapshot_pdf(projects, members, updates, deadlines, blockers)
         try:
             png_data = _poster_png(projects, members, updates, deadlines, blockers)

@@ -119,6 +119,8 @@ def brain_context() -> str:
 #   onboarding answers   -> 04_members.md  (profile block + confirm button)
 #   activation intro     -> 05_tracking.md (activation list)
 #   confirmed deadlines  -> 05_tracking.md (unchecked chase items)
+#   assigned next steps  -> 05_tracking.md (unchecked chase items)
+#                           + 03_active_projects.md (next step = step 1)
 #   progress updates     -> 03_active_projects.md (status / next / deadline)
 #                           + 05_tracking.md (log line + chase item)
 #   chase list           <- 03_active_projects.md + 05_tracking.md (code-built)
@@ -489,8 +491,7 @@ Your capabilities:
    A member reporting their OWN progress is a fact to record, not a decision
    for someone else — it needs no exec confirmation. Task assignment and
    schedule changes for OTHER people are still suggestions only.
-5. SCHEDULE BREAKDOWN + DEADLINE CONFIRMATION: when a member asks about a deadline
-   or their next steps, work backwards from the big deadline using the workflow
+5. SCHEDULE BREAKDOWN + DEADLINE CONFIRMATION: when a member explicitly asks to fix calendar dates for a known deadline, work backwards from the big deadline using the workflow
    in the brain (e.g. the 5-week interview cycle: contact -> schedule -> draft ->
    publish). Give them their NEXT 3 concrete steps with suggested dates, small
    enough to act on this week. The first step is always a concrete, visible
@@ -519,6 +520,29 @@ Your capabilities:
    Ask which resonates, refine round by round — never settle for vague themes.
    End with a concrete deliverable: the member sends bullet points on their
    chosen topics/guests within a week, then flow into deadline confirmation.
+8. NEXT-STEP ASSIGNMENT: when a member shares an update, a situation, or a
+   task — anything you can act on — assign exactly TWO next steps for them,
+   grounded in the workflow in the brain (the 5-week interview cycle:
+   contact -> schedule -> draft -> publish; the explainer pipeline:
+   brainstorm -> research -> draft -> assemble -> publish; roundtable prep).
+   Each step must be specific enough to act on without asking anything back:
+   name the concrete deliverable, the action, and the person or place
+   (e.g. "Message Melinda on WeChat to fix the interview time for next week",
+   not "contact the interviewee"). The first step is always a concrete,
+   visible deliverable. For each step, suggest a deadline window — 3 days
+   for quick, concrete work (a message, a short intro, a bullet-points doc),
+   7 days for standard work (research, a first draft section, scheduling),
+   14 days for larger or cross-person work (a full draft, coordinating
+   several people). Output a ```nextsteps fenced code block with JSON:
+   {"member": "<name>", "project": "<project or null>",
+   "items": [{"step": "<step>", "suggested": "3d" | "7d" | "14d",
+   "why": "<one line>"}, {"step": "<step>", "suggested": "3d" | "7d" | "14d",
+   "why": "<one line>"}]}. The app shows the two steps with 3/7/14-day
+   choices for the member to confirm; confirmed steps go on the exec chase
+   list. Do not output a nextsteps block and a deadlines block in the same
+   turn: use nextsteps when assigning from a fresh update or situation, and
+   capability 5 only when the member explicitly asks to fix calendar dates
+   for a known deadline.
 
 You never make decisions for people: task assignment and schedule changes are
 suggestions only — tell the user to confirm with an exec or the team lead.

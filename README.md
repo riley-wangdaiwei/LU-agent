@@ -1,7 +1,7 @@
 # LU — Team Conversation
 
 LU is the central coordination assistant for Lady Up. The app follows one
-scrolling flow: **Talk → Present → Act → Remember**. Members onboard, share
+scrolling flow: **Talk → Review → Remember**. Members onboard, share
 progress and blockers conversationally, review structured updates, and confirm
 what should be written to the SST Brain.
 
@@ -13,7 +13,7 @@ Live demo runs on Streamlit Community Cloud (free tier).
   interface as people scroll from identity to conversation and SST.
 - **Conversational updates** — LU uses the existing Gemini agent and SST
   context for onboarding, project questions, scheduling, and progress reports.
-- **Confirm before writing** — profile, progress, deadline, and activation
+- **Confirm before writing** — profile, progress, deadline, activation, and assigned next-step
   updates are presented for confirmation before being saved.
 - **SST Brain** — search and read the team's existing Markdown knowledge base.
 - **Team Snapshot** — an editorial report preview with PDF and PNG downloads
@@ -93,7 +93,7 @@ brain is what the app reads from then on.
 ## Project structure
 
 - `app.py` — Agent, SST parsing/writes, and app entry point
-- `hub_ui.py` — single-page scrolling Talk / Present / Act / Remember interface
+- `hub_ui.py` — single-page scrolling Talk / Review / Remember interface
 - `requirements.txt` — Python dependencies
 - `.env.example` — copy to `.env`, add your key (never commit `.env`)
 - `sst_brain/` — the shared knowledge base (6 Markdown files)
