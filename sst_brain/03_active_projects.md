@@ -8,6 +8,8 @@
 - 状态：最后一稿出篇中
 - 团队：Selena、Amelia（Bio Researcher）、Emily（Media Studies），qingyang（mentor）
 - 排期：agent在与成员交流后定
+- 下一步：与 Selena 确认排版进度并检查图文格式
+- 下次截止：2026-11-13
 
 ## 科普文/采访 Gender Studies + 足球
 
