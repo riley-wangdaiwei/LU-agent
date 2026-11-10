@@ -30,3 +30,6 @@
 ## 2026-11-10 — Riley project update
 - [x] 排版并完成发布 (project: 科普文 足球世界杯)
 - note: 足球世界杯科普文已完成
+
+## 2026-11-10 — Riley project update
+- [ ] 2026-11-13 — 与 Selena 确认排版进度并检查图文格式 (project: 科普文耐力)
