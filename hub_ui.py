@@ -701,7 +701,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
             if _manual_msg:
                 st.success(_manual_msg)
             _mp_list = parse_projects()
-            _mp_titles = [t for t, _f, _l in _mp_list]
+            _mp_titles = [p["name"] for p in _mp_list]
             with st.form("manual_update_form", clear_on_submit=False):
                 _mp = st.selectbox("项目", options=_mp_titles, key="manual_project")
                 _status_options = ["已完成", "撰写中", "最后一稿出篇中", "brainstorm中", "未开始", "持续更新中", "进行中"]
