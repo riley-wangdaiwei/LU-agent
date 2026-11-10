@@ -5,11 +5,12 @@
 ## 科普文"耐力"
 
 - 锚点：耐力
-- 状态：最后一稿出篇中
+- 状态：已完成
 - 团队：Selena、Amelia（Bio Researcher）、Emily（Media Studies），qingyang（mentor）
 - 排期：agent在与成员交流后定
 - 下一步：与 Selena 确认排版进度并检查图文格式
 - 下次截止：2026-11-13
+- 上一步已完成：写完了耐力科普文
 
 ## 科普文/采访 Gender Studies + 足球
 

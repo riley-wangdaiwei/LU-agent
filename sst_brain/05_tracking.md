@@ -33,3 +33,7 @@
 
 ## 2026-11-10 — Riley confirmed next steps
 - [ ] 2026-11-17 — 同步公众号排版 checklist 并准备视频号同步素材 (project: 科普文耐力)
+
+## 2026-11-10 — Riley project update
+- [x] 写完了耐力科普文 (project: 科普文耐力)
+- [ ] 2026-11-13 — 与 Selena 确认排版进度并检查图文格式 (project: 科普文耐力)
