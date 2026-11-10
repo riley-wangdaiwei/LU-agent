@@ -27,11 +27,6 @@
 ## 2026-10-01 — Amelia confirmed deadlines
 - [ ] 2026-10-01 — Amelia 提交耐力科普文稿件 (project: 科普文耐力)
 
-## 2026-11-07 — Riley project update
-- [x] 网站申请季 profiles 更新 (project: 网站更新 申请季profiles)
-- [ ] 新网站重新设计（Vercel、注重视觉与互动） (project: 网站更新 申请季profiles)
-- note: 申请季 profile 部分已全部完成
-
-## 2026-11-07 — Riley project update
-- [x] 拟定商业计划书 (project: 外联)
-- note: 商业计划书早就做完了
+## 2026-11-10 — Riley project update
+- [x] 排版并完成发布 (project: 科普文 足球世界杯)
+- note: 足球世界杯科普文已完成
