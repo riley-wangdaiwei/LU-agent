@@ -695,6 +695,43 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
             st.caption("Identify yourself above to continue.")
         else:
             st.caption("When LU extracts an update or next step from your conversation, confirm it here before it is added to the shared brain.")
+        with st.expander("MANUAL UPDATE · 手动记录", expanded=False):
+            st.caption("聊天里没生成确认卡片时，在这里直接写，同样会同步到 Brain。")
+            _manual_msg = st.session_state.get("manual_update_msg")
+            if _manual_msg:
+                st.success(_manual_msg)
+            _mp_list = parse_projects()
+            _mp_titles = [t for t, _f, _l in _mp_list]
+            with st.form("manual_update_form", clear_on_submit=False):
+                _mp = st.selectbox("项目", options=_mp_titles, key="manual_project")
+                _status_options = ["已完成", "撰写中", "最后一稿出篇中", "brainstorm中", "未开始", "持续更新中", "进行中"]
+                _cur = _current_status(_mp_list, _mp)
+                if _cur and _cur not in _status_options:
+                    _status_options = [_cur] + _status_options
+                _idx = _status_options.index(_cur) if _cur else 0
+                _ms = st.selectbox("新状态", options=_status_options, index=_idx, key="manual_status")
+                _mc = st.text_input("上一步已完成", placeholder="例如：写完了耐力科普文", key="manual_completed")
+                _mn = st.text_input("下一步", placeholder="例如：排版并发布", key="manual_next")
+                _md = st.date_input("下次截止（可选）", value=None, key="manual_deadline")
+                _submit = st.form_submit_button("CONFIRM MANUAL UPDATE")
+            if _submit:
+                _prog = {"member": identity, "project": _mp, "status": _ms,
+                         "completed_step": _mc.strip() or None,
+                         "next_step": _mn.strip() or None,
+                         "next_deadline": _md.isoformat() if _md else None,
+                         "note": None}
+                _res = apply_progress_update(_prog)
+                if _res.get("ambiguous"):
+                    _names = "、".join(_res.get("candidates", []))
+                    st.session_state.manual_update_msg = f"名字对上了多个项目：{_names}，请换一个更具体的项目名。"
+                else:
+                    _sync = "已同步到 main" if _res.get("pushed") else "已保存在应用内，GitHub 同步未完成"
+                    st.session_state.manual_update_msg = f"已写入 Brain：{_mp} → {_ms}（{_sync}）。"
+                    _sticky = st.session_state.get("sticky_progress") or {}
+                    if _sticky.get("project") == _mp:
+                        st.session_state.sticky_progress = None
+                        st.session_state.sticky_progress_key = ""
+                st.rerun()
         st.markdown('<div class="flow-label" style="margin-top:22px">PEOPLE DECIDE · LU ORGANIZES</div>',
                     unsafe_allow_html=True)
 
