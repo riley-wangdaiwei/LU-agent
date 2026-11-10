@@ -160,6 +160,24 @@ def _render_next_steps(pending, identity, base, github_push_file, apply_progress
         st.rerun()
 
 
+def _current_status(projects, name):
+    """A project's current status, matched by heading or anchor.
+
+    Returns "" unless exactly one project matches — display-only, so an
+    ambiguous name shows no old value rather than a wrong one.
+    """
+    q = re.sub(r"[^\w\u4e00-\u9fff]", "", name or "").lower()
+    hits = []
+    for p in projects:
+        names = [p["name"]] + [a.strip() for a in re.split(r"[、，,]", p.get("anchor", "")) if a.strip()]
+        for n in names:
+            nn = re.sub(r"[^\w\u4e00-\u9fff]", "", n).lower()
+            if q and nn and (nn in q or q in nn):
+                hits.append(p)
+                break
+    return hits[0].get("status", "") if len(hits) == 1 else ""
+
+
 def render_hub(*, base: Path, get_client, chat_once,
                identity_note, get_member_names, get_member_block, read_brain,
                parse_projects, parse_members, parse_tracking,
@@ -384,6 +402,9 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
     st.session_state.setdefault("activation_saved", False)
     st.session_state.setdefault("confirmed_nextsteps_key", "")
     st.session_state.setdefault("brain_doc", "")
+    st.session_state.setdefault("sticky_progress", None)
+    st.session_state.setdefault("sticky_progress_key", "")
+    st.session_state.setdefault("discarded_progress_key", "")
 
     identity = st.session_state.identity
     is_new = identity == "I'm new here"
@@ -413,7 +434,6 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
         st.session_state.profile_saved = False
         st.session_state.deadlines_saved = False
         st.session_state.activation_saved = False
-        st.session_state.confirmed_progress_key = ""
         return True
 
     if is_new and not st.session_state.get("onboard_auto_started"):
@@ -433,7 +453,16 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
     pending_nextsteps = _extract(latest_reply, "nextsteps")
     reply_hash = hashlib.sha256(latest_reply.encode("utf-8")).hexdigest() if latest_reply else ""
     safe_profile = pending_profile or {}
-    safe_progress = pending_progress or {}
+    # A pending update stays put until it is confirmed or discarded: the
+    # latest reply alone is too fragile — one more chat turn and it is gone.
+    if pending_progress:
+        _pkey = hashlib.sha256(json.dumps(pending_progress, sort_keys=True,
+                                          ensure_ascii=False).encode("utf-8")).hexdigest()
+        if _pkey != st.session_state.get("discarded_progress_key"):
+            st.session_state.sticky_progress = pending_progress
+            st.session_state.sticky_progress_key = _pkey
+    effective_progress = st.session_state.get("sticky_progress")
+    safe_progress = effective_progress or {}
 
     with st.container(key="flow-who", border=False):
         st.markdown(
@@ -539,7 +568,7 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
                 if value:
                     st.markdown(f"**{label}** · {value}")
             st.caption("Review and confirm the profile in the next section. LU only saves it after confirmation.")
-        elif pending_progress:
+        elif effective_progress:
             st.markdown('<div class="flow-label">PROGRESS UPDATE · AWAITING YOUR CONFIRMATION</div>', unsafe_allow_html=True)
             progress_rows = [
                 ("Project", safe_progress.get("project")),
@@ -550,8 +579,14 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
                 ("Note", safe_progress.get("note")),
             ]
             for label, value in progress_rows:
-                if value not in (None, "", "null"):
-                    st.markdown(f"**{label}** · {value}")
+                if value in (None, "", "null"):
+                    continue
+                if label == "Current status":
+                    old = _current_status(parse_projects(), safe_progress.get("project"))
+                    if old and old != value:
+                        st.markdown(f"**Current status** · {old} → {value}")
+                        continue
+                st.markdown(f"**{label}** · {value}")
             st.caption("Confirm below to write the update to the project file and tracking log.")
         elif pending_deadlines:
             st.markdown('<div class="flow-label">PROPOSED SCHEDULE · AWAITING YOUR CONFIRMATION</div>', unsafe_allow_html=True)
@@ -582,24 +617,33 @@ section[data-testid="stSidebar"] {{ display:none !important; }}
                 st.session_state.pending_identity = member_name
                 ok, detail = github_push_file("sst_brain/04_members.md")
                 if ok:
-                    st.success("Profile confirmed and synced to the brain-updates branch.")
+                    st.success("Profile confirmed and synced to main.")
                 else:
                     st.success("Profile confirmed in the app.")
                     st.caption(f"GitHub sync skipped ({detail}). Configure GITHUB_TOKEN for persistent sync.")
                 st.rerun()
-        elif pending_progress:
-            progress_key = hashlib.sha256(latest_reply.encode("utf-8")).hexdigest()
-            if st.session_state.get("confirmed_progress_key") == progress_key:
+        elif effective_progress:
+            pkey = st.session_state.get("sticky_progress_key", "")
+            if st.session_state.get("confirmed_progress_key") == pkey:
                 st.success("Update confirmed and recorded in the SST Brain.")
-            elif st.button("CONFIRM UPDATE", key="confirm_progress", type="primary"):
-                result = apply_progress_update(safe_progress)
-                st.session_state.confirmed_progress_key = progress_key
-                if result["pushed"]:
-                    st.success("Update confirmed and synced to the SST Brain.")
-                else:
-                    st.success("Update confirmed in the app.")
-                    st.caption("GitHub sync was not completed; configure GITHUB_TOKEN for persistent sync.")
-                st.rerun()
+            else:
+                if st.button("CONFIRM UPDATE", key="confirm_progress", type="primary"):
+                    result = apply_progress_update(safe_progress)
+                    if result.get("ambiguous"):
+                        names = "、".join(result.get("candidates", []))
+                        st.warning(f"这个名字对上了 {len(result['candidates'])} 个项目：{names}。请在对话里告诉 LU 是哪一个，确认后再点一次。")
+                    else:
+                        st.session_state.confirmed_progress_key = pkey
+                        if result["pushed"]:
+                            st.success("Update confirmed and synced to the SST Brain.")
+                        else:
+                            st.success("Update confirmed in the app.")
+                            st.caption("GitHub sync was not completed; configure GITHUB_TOKEN for persistent sync.")
+                        st.rerun()
+                if st.button("DISCARD UPDATE", key="discard_progress"):
+                    st.session_state.discarded_progress_key = pkey
+                    st.session_state.sticky_progress = None
+                    st.rerun()
         elif pending_deadlines and not st.session_state.deadlines_saved:
             if st.button("CONFIRM NEXT STEPS", key="confirm_deadlines", type="primary"):
                 path = base / "sst_brain" / "05_tracking.md"

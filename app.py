@@ -38,13 +38,16 @@ STARTERS = [
 ]
 
 # ---------- GitHub sync ----------
-def github_push_file(rel_path: str, branch: str = "brain-updates") -> tuple:
+def github_push_file(rel_path: str, branch: str = "main") -> tuple:
     """Push one brain file to GitHub so runtime edits survive redeploys.
 
     Uses GITHUB_TOKEN from env / Streamlit Secrets (needs Contents: read+write
-    on the repo). Pushes to a side branch, NOT main, so the live Streamlit app
-    doesn't reboot on every save. Merge the branch to main on github.com when
-    ready — that redeploys the app with the merged brain.
+    on the repo). Pushes straight to main: every confirmed update is the live
+    truth after the next redeploy (about a minute), and every write is a
+    GitHub commit, so a bad write can be reverted from the repo history.
+    (An earlier version pushed to a side branch, brain-updates, which the app
+    never read back — confirmed updates went invisible and stale copies could
+    overwrite newer ones. Do not bring that back.)
     """
     import base64, json, urllib.request, urllib.error
     token = os.getenv("GITHUB_TOKEN")
@@ -152,24 +155,51 @@ def _set_section_lines(body: str, updates: dict) -> str:
             body = body.rstrip() + "\n" + line + "\n"
     return body
 
+def _project_aliases(body: str) -> list:
+    """Anchor keywords from a project's '- 锚点：a、b' line."""
+    m = re.search(r"^- 锚点：(.*)$", body, re.M)
+    if not m:
+        return []
+    return [a.strip() for a in re.split(r"[、，,]", m.group(1)) if a.strip()]
+
+
+def match_project(project: str, text: str) -> list:
+    """Sections whose heading or anchor matches the name.
+
+    Returns [(heading_match, next_match), ...]. Empty means a new project;
+    more than one means the name is ambiguous — the caller must not guess.
+    """
+    heads = list(re.finditer(r"^-?\s*## (.+)$", text, re.M))
+    q = _norm_name(project)
+    out = []
+    for i, m in enumerate(heads):
+        body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        names = [m.group(1).strip()] + _project_aliases(body)
+        if q and any(_norm_name(n) and (_norm_name(n) in q or q in _norm_name(n))
+                     for n in names):
+            out.append((m, heads[i + 1] if i + 1 < len(heads) else None))
+    return out
+
+
 def apply_progress_update(prog: dict) -> dict:
     """Write one progress update to 03 + 05. Idempotent on re-runs:
     re-applying the same update replaces project lines (not duplicates)
     and skips tracking lines already present.
-    Returns {"project", "tracking_added", "pushed"}."""
+    Returns {"project", "tracking_added", "pushed", "ambiguous",
+    "candidates"}. When the name matches more than one project, nothing is
+    written and "ambiguous" is True — the UI must ask which project."""
     member = prog.get("member") or "Unknown"
     project = prog.get("project") or "Unnamed project"
     today = datetime.date.today().isoformat()
 
     p = BRAIN_DIR / "03_active_projects.md"
     cur = p.read_text(encoding="utf-8") if p.exists() else "# Active Projects\n"
-    heads = list(re.finditer(r"^-?\s*## (.+)$", cur, re.M))
-    target = None
-    for i, m in enumerate(heads):
-        if _norm_name(project) and (_norm_name(project) in _norm_name(m.group(1))
-                                    or _norm_name(m.group(1)) in _norm_name(project)):
-            target = (m, heads[i + 1] if i + 1 < len(heads) else None)
-            break
+    matches = match_project(project, cur)
+    if len(matches) > 1:
+        return {"project": project, "tracking_added": 0, "pushed": [],
+                "ambiguous": True,
+                "candidates": [m.group(1).strip() for m, _ in matches]}
+    target = matches[0] if matches else None
     updates = {}
     if prog.get("status"):
         updates["状态"] = prog["status"]
@@ -231,6 +261,7 @@ def parse_projects() -> list:
                     "next_step": field("下一步"), "next_deadline": field("下次截止"),
                     "completed": field("上一步已完成"),
                     "team": field("团队"), "schedule": field("排期"),
+                    "anchor": field("锚点"),
                     "blocker": field("阻塞") or field("blocker")})
     return out
 
@@ -478,11 +509,20 @@ Your capabilities:
    project — acknowledge it briefly, then ALWAYS output a ```progress fenced
    code block with JSON:
    {"member": "<the chatting member's name from their identity>",
-   "project": "<project name as in the brain, or the name they used>",
+   "project": "<the full canonical project name as in the brain — never a short form>",
    "completed_step": "<step just finished, or null>",
    "next_step": "<next step, or null>", "status": "<one-line current
    status, or null>", "next_deadline": "YYYY-MM-DD or null",
    "note": "<short note, or null>"}.
+   PROJECT NAMES: each project has an anchor — a short unique keyword in the
+   brain ("- 锚点：..."). When a member names a project by a short form or
+   nickname (e.g. "耐力"), first confirm the full name in chat ("你说的'耐力'
+   是'科普文耐力'对吗？") and only output the progress block with the confirmed
+   full name after they say yes. If a name could match more than one project,
+   always ask — never guess. When a member says a project or a step is
+   finished ("写完了", "完成了", "done"), set status to 已完成 (and
+   completed_step to what finished) — a finished step must move the status,
+   not leave it where it was.
    The app presents this as a structured update and waits for the member to
    confirm before writing it to the project file and tracking log. If the
    project is not in the brain yet, still output the block with the name they
@@ -537,7 +577,9 @@ Your capabilities:
    {"member": "<name>", "project": "<project or null>",
    "items": [{"step": "<step>", "suggested": "3d" | "7d" | "14d",
    "why": "<one line>"}, {"step": "<step>", "suggested": "3d" | "7d" | "14d",
-   "why": "<one line>"}]}. The app shows the two steps with 3/7/14-day
+   "why": "<one line>"}]}. The project must be the full canonical name from
+   the brain (same naming rule as capability 4 — confirm it in chat first if
+   the member used a short form). The app shows the two steps with 3/7/14-day
    choices for the member to confirm; confirmed steps go on the exec chase
    list. Do not output a nextsteps block and a deadlines block in the same
    turn: use nextsteps when assigning from a fresh update or situation, and

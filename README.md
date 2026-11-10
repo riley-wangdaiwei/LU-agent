@@ -83,12 +83,10 @@ When a member confirms their onboarding profile in chat, the app can push
    ```toml
    GITHUB_TOKEN = "your-token-here"
    ```
-3. Done. Each confirmed profile is committed to the **`brain-updates`**
-   branch (never `main`, so the live app doesn't reboot on every save).
-
-When you want the updates live: open the repo → compare `brain-updates`
-against `main` → merge. Streamlit redeploys automatically and the merged
-brain is what the app reads from then on.
+3. Done. Each confirmed update is committed straight to **`main`**, so the
+   live app reads it after the next redeploy (about a minute). Every
+   confirmed change is a GitHub commit, so a bad write can be reverted
+   from the repo history.
 
 ## Project structure
 
