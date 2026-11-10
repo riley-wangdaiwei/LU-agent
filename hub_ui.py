@@ -135,11 +135,22 @@ def _render_next_steps(pending, identity, base, github_push_file, apply_progress
             m = re.search(r"(\d{4}-\d{2}-\d{2})", label or "")
             dates.append(m.group(1) if m else (today + datetime.timedelta(days=7)).isoformat())
         synced = True
+        tracking_added = 0
         if project:
+            # Write 03 + the step-1 chase line locally, but push nothing yet:
+            # 05 is written and pushed exactly once for the whole confirm
+            # (a second push 2s later once overwrote the first one's entry).
             result = apply_progress_update({"member": member, "project": project,
                                             "next_step": items[0].get("step"),
-                                            "next_deadline": dates[0]})
-            synced = bool(result.get("pushed"))
+                                            "next_deadline": dates[0]}, push=False)
+            if result.get("ambiguous"):
+                names = "、".join(result.get("candidates", []))
+                st.warning(f"这个名字对上了 {len(result['candidates'])} 个项目：{names}。请在对话里告诉 LU 是哪一个，确认后再点一次。")
+                synced = False
+            else:
+                tracking_added = result.get("tracking_added", 0)
+                ok03, _ = github_push_file("sst_brain/03_active_projects.md")
+                synced = bool(ok03)
         tpath = base / "sst_brain" / "05_tracking.md"
         tcur = tpath.read_text(encoding="utf-8") if tpath.exists() else "# 追踪日志\n"
         start = 1 if project else 0
@@ -151,6 +162,7 @@ def _render_next_steps(pending, identity, base, github_push_file, apply_progress
         if lines:
             block = f"\n## {today.isoformat()} — {member} confirmed next steps\n" + "\n".join(lines) + "\n"
             tpath.write_text(tcur.rstrip() + "\n" + block, encoding="utf-8")
+        if tracking_added or lines:
             ok, _ = github_push_file("sst_brain/05_tracking.md")
             synced = synced and ok
         st.session_state.confirmed_nextsteps_key = reply_hash

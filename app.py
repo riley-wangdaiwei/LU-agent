@@ -181,13 +181,15 @@ def match_project(project: str, text: str) -> list:
     return out
 
 
-def apply_progress_update(prog: dict) -> dict:
+def apply_progress_update(prog: dict, push: bool = True) -> dict:
     """Write one progress update to 03 + 05. Idempotent on re-runs:
     re-applying the same update replaces project lines (not duplicates)
     and skips tracking lines already present.
     Returns {"project", "tracking_added", "pushed", "ambiguous",
     "candidates"}. When the name matches more than one project, nothing is
-    written and "ambiguous" is True — the UI must ask which project."""
+    written and "ambiguous" is True — the UI must ask which project.
+    push=False writes the files locally but skips the GitHub pushes, for
+    callers that batch several writes into a single push."""
     member = prog.get("member") or "Unknown"
     project = prog.get("project") or "Unnamed project"
     today = datetime.date.today().isoformat()
@@ -237,10 +239,11 @@ def apply_progress_update(prog: dict) -> dict:
         t.write_text(tcur.rstrip() + "\n" + block, encoding="utf-8")
 
     pushed = []
-    for rel in ("sst_brain/03_active_projects.md", "sst_brain/05_tracking.md"):
-        ok, _ = github_push_file(rel)
-        if ok:
-            pushed.append(rel)
+    if push:
+        for rel in ("sst_brain/03_active_projects.md", "sst_brain/05_tracking.md"):
+            ok, _ = github_push_file(rel)
+            if ok:
+                pushed.append(rel)
     return {"project": project, "tracking_added": len(new_entries), "pushed": pushed}
 
 def parse_projects() -> list:
