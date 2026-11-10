@@ -26,3 +26,7 @@
 
 ## 2026-10-01 — Amelia confirmed deadlines
 - [ ] 2026-10-01 — Amelia 提交耐力科普文稿件 (project: 科普文耐力)
+
+## 2026-11-10 — Riley project update
+- [x] 排版并完成发布 (project: 科普文 足球世界杯)
+- note: 足球世界杯科普文已完成
